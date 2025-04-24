@@ -56,6 +56,10 @@ class HTTPRequestTool:
         copy_button = ttk.Button(response_frame, text="📋 Copy", command=self.copy_response)
         copy_button.pack(side=tk.RIGHT, padx=5)
         
+        # Add save HTML button
+        save_html_button = ttk.Button(response_frame, text="💾 Save HTML", command=self.save_clickjack_html)
+        save_html_button.pack(side=tk.RIGHT, padx=5)
+        
         self.response_text = tk.Text(self.response_frame, width=50, height=15)
         self.response_text.pack(padx=5, pady=5)
 
@@ -223,6 +227,35 @@ class HTTPRequestTool:
         except Exception as e:
             self.response_text.delete("1.0", tk.END)
             self.response_text.insert("1.0", f"Error processing request: {str(e)}")
+
+    def save_clickjack_html(self):
+        # Get the current clickjack HTML from the response text
+        html_content = self.response_text.get("1.0", tk.END).strip()
+        
+        # Check if this is a clickjack HTML (contains the specific title)
+        if "Aon Clickjacking Example PoC" not in html_content:
+            messagebox.showwarning("Warning", "No clickjacking HTML to save. Generate a clickjacking PoC first.")
+            return
+            
+        # Extract URL from the HTML content
+        url_match = re.search(r'<iframe src="([^"]+)"', html_content)
+        if not url_match:
+            messagebox.showerror("Error", "Could not extract URL from HTML content")
+            return
+            
+        url = url_match.group(1)
+        # Remove https:// or http:// from URL for filename
+        clean_url = re.sub(r'^https?://', '', url)
+        # Sanitize URL for filename
+        safe_url = re.sub(r'[^\w\-_\. ]', '_', clean_url)
+        filename = f"{safe_url}_clickjack_poc.html"
+        
+        try:
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write(html_content)
+            messagebox.showinfo("Success", f"HTML file saved as: {filename}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save HTML file: {str(e)}")
 
 def main():
     root = tk.Tk()
