@@ -1,0 +1,233 @@
+import tkinter as tk
+from tkinter import ttk, messagebox, simpledialog
+import jwt
+import json
+import requests
+import re
+from urllib.parse import urlparse, parse_qs
+
+class HTTPRequestTool:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("HTTP Request Tool with JWT Decoder")
+        
+        # Create main paned window
+        self.paned = ttk.PanedWindow(root, orient=tk.HORIZONTAL)
+        self.paned.pack(fill=tk.BOTH, expand=True)
+        
+        # Left frame for request
+        self.request_frame = ttk.Frame(self.paned)
+        self.paned.add(self.request_frame)
+        
+        # Right frame for JWT and response
+        self.response_frame = ttk.Frame(self.paned)
+        self.paned.add(self.response_frame)
+        
+        # Request components
+        ttk.Label(self.request_frame, text="HTTP Request").pack(pady=5)
+        self.request_text = tk.Text(self.request_frame, width=50, height=30)
+        self.request_text.pack(padx=5, pady=5)
+        
+        # Bind text changes to JWT detection
+        self.request_text.bind('<<Modified>>', self.on_text_change)
+        
+        # Button frame
+        button_frame = ttk.Frame(self.request_frame)
+        button_frame.pack(pady=5)
+        
+        # Send button
+        self.send_button = ttk.Button(button_frame, text="Send Request", command=self.process_request)
+        self.send_button.pack(side=tk.LEFT, padx=5)
+        
+        # Clickjack button
+        self.clickjack_button = ttk.Button(button_frame, text="Generate Clickjack", command=self.generate_clickjack)
+        self.clickjack_button.pack(side=tk.LEFT, padx=5)
+        
+        # JWT decode section
+        ttk.Label(self.response_frame, text="JWT Decoded").pack(pady=5)
+        self.jwt_text = tk.Text(self.response_frame, width=50, height=15)
+        self.jwt_text.pack(padx=5, pady=5)
+        
+        # Response section
+        response_frame = ttk.Frame(self.response_frame)
+        response_frame.pack(pady=5, fill=tk.X)
+        
+        ttk.Label(response_frame, text="Response").pack(side=tk.LEFT, pady=5)
+        copy_button = ttk.Button(response_frame, text="📋 Copy", command=self.copy_response)
+        copy_button.pack(side=tk.RIGHT, padx=5)
+        
+        self.response_text = tk.Text(self.response_frame, width=50, height=15)
+        self.response_text.pack(padx=5, pady=5)
+
+    def decode_jwt(self, token):
+        try:
+            # Decode without verification
+            header = jwt.get_unverified_header(token)
+            payload = jwt.decode(token, options={"verify_signature": False})
+            
+            decoded = f"Header:\n{json.dumps(header, indent=2)}\n\nPayload:\n{json.dumps(payload, indent=2)}"
+            return decoded
+        except jwt.exceptions.DecodeError:
+            return "Invalid JWT format or encoding"
+        except Exception as e:
+            return f"Error decoding JWT: {str(e)}"
+
+    def is_jwt(self, token):
+        # Check if string matches JWT pattern (three base64-encoded sections separated by dots)
+        jwt_pattern = r'^[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+$'
+        return bool(re.match(jwt_pattern, token))
+
+    def find_jwt(self, request_text):
+        # Split request into words and check each for JWT pattern
+        tokens = []
+        
+        # Split by common delimiters
+        words = re.split(r'[\s\n\r\t,\'\"{}()\[\]=&?]', request_text)
+        
+        for word in words:
+            word = word.strip()
+            # Remove common wrapper characters
+            word = re.sub(r'^[\'\"]+|[\'\"]+$', '', word)
+            
+            if self.is_jwt(word):
+                tokens.append(word)
+        
+        # Return all found JWTs
+        return tokens
+
+    def on_text_change(self, event=None):
+        # Reset the modified flag
+        self.request_text.edit_modified(False)
+        
+        # Get current text and find/decode JWTs
+        request_text = self.request_text.get("1.0", tk.END).strip()
+        jwt_tokens = self.find_jwt(request_text)
+        
+        self.jwt_text.delete("1.0", tk.END)
+        if jwt_tokens:
+            decoded_output = ""
+            for i, token in enumerate(jwt_tokens, 1):
+                decoded_output += f"JWT #{i}:\n{self.decode_jwt(token)}\n\n"
+            self.jwt_text.insert("1.0", decoded_output)
+        else:
+            self.jwt_text.insert("1.0", "No JWT tokens found in request")
+
+    def copy_response(self):
+        response_text = self.response_text.get("1.0", tk.END).strip()
+        self.root.clipboard_clear()
+        self.root.clipboard_append(response_text)
+        messagebox.showinfo("Success", "Content copied to clipboard!")
+
+    def generate_clickjack(self):
+        url = simpledialog.askstring("Generate Clickjack", "Enter target URL:")
+        if url:
+            clickjack_html = f"""<html>
+   <head>
+      <title>Aon Clickjacking Example PoC</title>
+      <style>
+         body {{
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+         }}
+         .container {{
+            max-width: 1200px;
+            margin: 0 auto;
+         }}
+         h1 {{
+            color: #333;
+            margin-bottom: 20px;
+         }}
+         .iframe-container {{
+            position: relative;
+            width: 100%;
+            height: 80vh;
+         }}
+         iframe {{
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0.5;
+            border: 2px solid #333;
+         }}
+      </style>
+   </head>
+   <body>
+      <div class="container">
+         <h1>Aon Clickjacking PoC</h1>
+         <div class="iframe-container">
+            <iframe src="{url}"></iframe>
+         </div>
+      </div>
+   </body>
+</html>"""
+            self.response_text.delete("1.0", tk.END)
+            self.response_text.insert("1.0", clickjack_html)
+
+    def process_request(self):
+        request_text = self.request_text.get("1.0", tk.END).strip()
+        
+        try:
+            # Parse the raw HTTP request
+            request_lines = request_text.split('\n')
+            if not request_lines:
+                raise ValueError("Empty request")
+
+            # Parse first line (method, path, version)
+            method, path, *_ = request_lines[0].split()
+            
+            # Parse headers
+            headers = {}
+            current_line = 1
+            while current_line < len(request_lines) and request_lines[current_line].strip():
+                header_line = request_lines[current_line].strip()
+                key, value = header_line.split(':', 1)
+                headers[key.strip()] = value.strip()
+                current_line += 1
+            
+            # Get body if exists (after blank line)
+            body = None
+            if current_line < len(request_lines):
+                body = '\n'.join(request_lines[current_line + 1:]).strip()
+            
+            # Parse URL
+            if not path.startswith('http'):
+                # If host header exists, use it to construct full URL
+                host = headers.get('Host', '')
+                if host:
+                    scheme = 'https' if 'https' in host.lower() else 'http'
+                    path = f"{scheme}://{host}{path}"
+                else:
+                    raise ValueError("No host specified in headers and path is not absolute URL")
+            
+            # Send the request
+            response = requests.request(
+                method=method,
+                url=path,
+                headers=headers,
+                data=body,
+                verify=False  # Skip SSL verification for testing
+            )
+            
+            # Format response
+            response_text = f"HTTP/{response.raw.version / 10.0} {response.status_code} {response.reason}\n"
+            for key, value in response.headers.items():
+                response_text += f"{key}: {value}\n"
+            response_text += f"\n{response.text}"
+            
+            self.response_text.delete("1.0", tk.END)
+            self.response_text.insert("1.0", response_text)
+            
+        except Exception as e:
+            self.response_text.delete("1.0", tk.END)
+            self.response_text.insert("1.0", f"Error processing request: {str(e)}")
+
+def main():
+    root = tk.Tk()
+    app = HTTPRequestTool(root)
+    root.mainloop()
+
+if __name__ == "__main__":
+    main()
