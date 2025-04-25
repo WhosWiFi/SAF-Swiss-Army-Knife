@@ -4,6 +4,8 @@ import jwt
 import json
 import requests
 import re
+import subprocess
+import os
 from urllib.parse import urlparse, parse_qs
 
 class HTTPRequestTool:
@@ -11,29 +13,65 @@ class HTTPRequestTool:
         self.root = root
         self.root.title("HTTP Request Tool with JWT Decoder")
         
+        # Set minimum window size
+        self.root.minsize(1200, 800)
+        
         # Create main paned window
         self.paned = ttk.PanedWindow(root, orient=tk.HORIZONTAL)
         self.paned.pack(fill=tk.BOTH, expand=True)
         
         # Left frame for request
         self.request_frame = ttk.Frame(self.paned)
-        self.paned.add(self.request_frame)
+        self.paned.add(self.request_frame, weight=1)
         
         # Right frame for JWT and response
         self.response_frame = ttk.Frame(self.paned)
-        self.paned.add(self.response_frame)
+        self.paned.add(self.response_frame, weight=1)
+        
+        # Create vertical paned window for JWT and response
+        self.vertical_paned = ttk.PanedWindow(self.response_frame, orient=tk.VERTICAL)
+        self.vertical_paned.pack(fill=tk.BOTH, expand=True)
+        
+        # JWT section
+        self.jwt_section = ttk.Frame(self.vertical_paned)
+        self.vertical_paned.add(self.jwt_section, weight=1)
+        
+        # JWT header with minimize checkbox
+        jwt_header = ttk.Frame(self.jwt_section)
+        jwt_header.pack(fill=tk.X, pady=5)
+        ttk.Label(jwt_header, text="JWT Decoded").pack(side=tk.LEFT, pady=5)
+        self.minimize_jwt = tk.BooleanVar(value=False)
+        self.minimize_check = ttk.Checkbutton(jwt_header, text="Minimize", variable=self.minimize_jwt, command=self.toggle_jwt_section)
+        self.minimize_check.pack(side=tk.RIGHT, padx=5)
+        
+        self.jwt_text = tk.Text(self.jwt_section, width=80, height=20)
+        self.jwt_text.pack(padx=5, pady=5, fill=tk.BOTH, expand=True)
+        
+        # Response section
+        self.response_section = ttk.Frame(self.vertical_paned)
+        self.vertical_paned.add(self.response_section, weight=1)
+        
+        # Response header
+        response_header = ttk.Frame(self.response_section)
+        response_header.pack(fill=tk.X, pady=5)
+        ttk.Label(response_header, text="Response").pack(side=tk.LEFT, pady=5)
+        copy_button = ttk.Button(response_header, text="📋 Copy", command=self.copy_response)
+        copy_button.pack(side=tk.RIGHT, padx=5)
+        
+        self.response_text = tk.Text(self.response_section, width=80, height=20)
+        self.response_text.pack(padx=5, pady=5, fill=tk.BOTH, expand=True)
         
         # Request components
         ttk.Label(self.request_frame, text="HTTP Request").pack(pady=5)
-        self.request_text = tk.Text(self.request_frame, width=50, height=30)
-        self.request_text.pack(padx=5, pady=5)
+        self.request_text = tk.Text(self.request_frame, width=80, height=40)
+        self.request_text.pack(padx=5, pady=5, fill=tk.BOTH, expand=True)
         
         # Bind text changes to JWT detection
         self.request_text.bind('<<Modified>>', self.on_text_change)
         
         # Button frame
         button_frame = ttk.Frame(self.request_frame)
-        button_frame.pack(pady=5)
+        button_frame.pack(pady=5, fill=tk.X)
         
         # Send button
         self.send_button = ttk.Button(button_frame, text="Send Request", command=self.process_request)
@@ -43,25 +81,9 @@ class HTTPRequestTool:
         self.clickjack_button = ttk.Button(button_frame, text="Generate Clickjack", command=self.generate_clickjack)
         self.clickjack_button.pack(side=tk.LEFT, padx=5)
         
-        # JWT decode section
-        ttk.Label(self.response_frame, text="JWT Decoded").pack(pady=5)
-        self.jwt_text = tk.Text(self.response_frame, width=50, height=15)
-        self.jwt_text.pack(padx=5, pady=5)
-        
-        # Response section
-        response_frame = ttk.Frame(self.response_frame)
-        response_frame.pack(pady=5, fill=tk.X)
-        
-        ttk.Label(response_frame, text="Response").pack(side=tk.LEFT, pady=5)
-        copy_button = ttk.Button(response_frame, text="📋 Copy", command=self.copy_response)
-        copy_button.pack(side=tk.RIGHT, padx=5)
-        
-        # Add save HTML button
-        save_html_button = ttk.Button(response_frame, text="💾 Save HTML", command=self.save_clickjack_html)
-        save_html_button.pack(side=tk.RIGHT, padx=5)
-        
-        self.response_text = tk.Text(self.response_frame, width=50, height=15)
-        self.response_text.pack(padx=5, pady=5)
+        # TestSSL button
+        self.testssl_button = ttk.Button(button_frame, text="Run TestSSL", command=self.run_testssl)
+        self.testssl_button.pack(side=tk.LEFT, padx=5)
 
     def decode_jwt(self, token):
         try:
@@ -228,34 +250,47 @@ class HTTPRequestTool:
             self.response_text.delete("1.0", tk.END)
             self.response_text.insert("1.0", f"Error processing request: {str(e)}")
 
-    def save_clickjack_html(self):
-        # Get the current clickjack HTML from the response text
-        html_content = self.response_text.get("1.0", tk.END).strip()
-        
-        # Check if this is a clickjack HTML (contains the specific title)
-        if "Aon Clickjacking Example PoC" not in html_content:
-            messagebox.showwarning("Warning", "No clickjacking HTML to save. Generate a clickjacking PoC first.")
-            return
-            
-        # Extract URL from the HTML content
-        url_match = re.search(r'<iframe src="([^"]+)"', html_content)
-        if not url_match:
-            messagebox.showerror("Error", "Could not extract URL from HTML content")
-            return
-            
-        url = url_match.group(1)
-        # Remove https:// or http:// from URL for filename
-        clean_url = re.sub(r'^https?://', '', url)
-        # Sanitize URL for filename
-        safe_url = re.sub(r'[^\w\-_\. ]', '_', clean_url)
-        filename = f"{safe_url}_clickjack_poc.html"
-        
-        try:
-            with open(filename, 'w', encoding='utf-8') as f:
-                f.write(html_content)
-            messagebox.showinfo("Success", f"HTML file saved as: {filename}")
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to save HTML file: {str(e)}")
+    def run_testssl(self):
+        domain = simpledialog.askstring("TestSSL", "Enter domain to test:")
+        if domain:
+            try:
+                # Store current directory
+                current_dir = os.getcwd()
+                
+                # Change to testssl directory
+                os.chdir('testssl')
+                
+                # Make sure testssl.sh is executable
+                os.chmod('testssl.sh', 0o755)
+                
+                # Run testssl.sh with HTML output using system OpenSSL
+                result = subprocess.run(
+                    ['./testssl.sh', '--html', domain],
+                    capture_output=True,
+                    text=True
+                )
+                
+                # Change back to original directory
+                os.chdir(current_dir)
+                
+                # Display the output in the response text area
+                self.response_text.delete("1.0", tk.END)
+                self.response_text.insert("1.0", f"TestSSL Results for {domain}:\n\n{result.stdout}")
+                
+                if result.stderr:
+                    self.response_text.insert(tk.END, f"\n\nErrors:\n{result.stderr}")
+                
+                messagebox.showinfo("TestSSL", f"TestSSL scan completed for {domain}")
+            except Exception as e:
+                # Make sure we change back to original directory even if there's an error
+                os.chdir(current_dir)
+                messagebox.showerror("Error", f"Failed to run TestSSL: {str(e)}")
+
+    def toggle_jwt_section(self):
+        if self.minimize_jwt.get():
+            self.jwt_text.pack_forget()
+        else:
+            self.jwt_text.pack(padx=5, pady=5, fill=tk.BOTH, expand=True)
 
 def main():
     root = tk.Tk()
