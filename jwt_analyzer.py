@@ -457,18 +457,7 @@ class HTTPRequestTool:
         # Create edit window
         edit_window = tk.Toplevel(self.root)
         edit_window.title("Edit JWT")
-        edit_window.geometry("600x400")
-        
-        # Create text widgets for header and payload
-        header_frame = ttk.LabelFrame(edit_window, text="Header")
-        header_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        header_text = tk.Text(header_frame, width=80, height=10)
-        header_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        
-        payload_frame = ttk.LabelFrame(edit_window, text="Payload")
-        payload_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        payload_text = tk.Text(payload_frame, width=80, height=10)
-        payload_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        edit_window.geometry("400x300")
         
         # Parse current JWT content
         try:
@@ -479,39 +468,76 @@ class HTTPRequestTool:
             header_json = json.loads(jwt_content[header_start:header_end].strip())
             payload_json = json.loads(jwt_content[payload_start:].strip())
             
-            # Populate text widgets
+            # Create a frame for each part
+            header_frame = ttk.LabelFrame(edit_window, text="Header")
+            header_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+            header_text = tk.Text(header_frame, width=40, height=5)
+            header_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
             header_text.insert("1.0", json.dumps(header_json, indent=2))
+            
+            payload_frame = ttk.LabelFrame(edit_window, text="Payload")
+            payload_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+            payload_text = tk.Text(payload_frame, width=40, height=5)
+            payload_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
             payload_text.insert("1.0", json.dumps(payload_json, indent=2))
+            
+            def save_changes():
+                try:
+                    # Get edited content
+                    new_header = json.loads(header_text.get("1.0", tk.END).strip())
+                    new_payload = json.loads(payload_text.get("1.0", tk.END).strip())
+                    
+                    # Get the original request
+                    original_request = self.request_text.get("1.0", tk.END)
+                    
+                    # Find the JWT token in the request
+                    # Look for Authorization header with Bearer token
+                    auth_line = None
+                    for line in original_request.split('\n'):
+                        if 'Authorization:' in line and 'Bearer' in line:
+                            auth_line = line
+                            break
+                    
+                    if auth_line:
+                        # Extract the original token
+                        original_token = auth_line.split('Bearer ')[1].strip()
+                        parts = original_token.split('.')
+                        
+                        # Re-encode only the modified parts
+                        if json.dumps(header_json) != json.dumps(new_header):
+                            parts[0] = base64.urlsafe_b64encode(
+                                json.dumps(new_header).encode('utf-8')
+                            ).decode('utf-8').rstrip('=')
+                        
+                        if json.dumps(payload_json) != json.dumps(new_payload):
+                            parts[1] = base64.urlsafe_b64encode(
+                                json.dumps(new_payload).encode('utf-8')
+                            ).decode('utf-8').rstrip('=')
+                        
+                        # Reconstruct the token
+                        new_token = '.'.join(parts)
+                        
+                        # Replace the token in the request while maintaining the rest of the request
+                        updated_request = original_request.replace(original_token, new_token)
+                        
+                        # Update the request text
+                        self.request_text.delete("1.0", tk.END)
+                        self.request_text.insert("1.0", updated_request)
+                        
+                        edit_window.destroy()
+                        # Trigger text change to update decoded view
+                        self.on_text_change()
+                    else:
+                        messagebox.showerror("Error", "Could not find JWT token in request")
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to save changes: {str(e)}")
+            
+            save_button = ttk.Button(edit_window, text="Save Changes", command=save_changes)
+            save_button.pack(pady=10)
+            
         except Exception as e:
             messagebox.showerror("Error", f"Failed to parse JWT: {str(e)}")
             return
-        
-        # Add save button
-        def save_changes():
-            try:
-                # Get edited content
-                new_header = json.loads(header_text.get("1.0", tk.END).strip())
-                new_payload = json.loads(payload_text.get("1.0", tk.END).strip())
-                
-                # Re-encode the JWT
-                new_token = self.encode_jwt(new_header, new_payload)
-                
-                # Update the request text with the new token
-                current_request = self.request_text.get("1.0", tk.END)
-                # Find and replace the old token with the new one
-                # This is a simple replacement - you should make it more robust
-                updated_request = current_request.replace(jwt_content.split('\n')[0].split(':')[1].strip(), new_token)
-                self.request_text.delete("1.0", tk.END)
-                self.request_text.insert("1.0", updated_request)
-                
-                edit_window.destroy()
-                # Trigger text change to update decoded view
-                self.on_text_change()
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to save changes: {str(e)}")
-        
-        save_button = ttk.Button(edit_window, text="Save Changes", command=save_changes)
-        save_button.pack(pady=10)
 
 def main():
     root = tk.Tk()
