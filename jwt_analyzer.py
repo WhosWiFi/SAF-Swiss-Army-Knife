@@ -358,11 +358,16 @@ class HTTPRequestTool:
             self.request_text.insert("1.0", modified_request)
             self.process_request()
             
-            # Check the response for failure indicators
-            response_text = self.response_text.get("1.0", tk.END).lower()
-            failure_indicators = ['jwt expired', 'jwt invalid', 'invalid signature', 'invalid token']
+            # Get the response status code from the response text
+            response_text = self.response_text.get("1.0", tk.END)
+            status_line = response_text.split('\n')[0]
+            try:
+                status_code = int(status_line.split()[1])
+            except (IndexError, ValueError):
+                status_code = 0
             
-            if any(indicator in response_text for indicator in failure_indicators):
+            # Check if the status code indicates failure (400 or 500 series)
+            if status_code >= 400:
                 messagebox.showinfo("Attack Result", "Unverified Signature Attack: ❌ FAILED")
             else:
                 messagebox.showinfo("Attack Result", "Unverified Signature Attack: ✅ SUCCESS")
