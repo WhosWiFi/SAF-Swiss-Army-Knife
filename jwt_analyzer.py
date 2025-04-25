@@ -40,7 +40,6 @@ class HTTPRequestTool:
         # JWT header with minimize checkbox
         jwt_header = ttk.Frame(self.jwt_section)
         jwt_header.pack(fill=tk.X, pady=5)
-        ttk.Label(jwt_header, text="JWT Decoded").pack(side=tk.LEFT, pady=5)
         self.minimize_jwt = tk.BooleanVar(value=False)
         self.minimize_check = ttk.Checkbutton(jwt_header, text="Minimize", variable=self.minimize_jwt, command=self.toggle_jwt_section)
         self.minimize_check.pack(side=tk.RIGHT, padx=5)
