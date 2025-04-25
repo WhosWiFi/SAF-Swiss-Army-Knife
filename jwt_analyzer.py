@@ -45,6 +45,13 @@ class HTTPRequestTool:
         self.minimize_check = ttk.Checkbutton(jwt_header, text="Minimize", variable=self.minimize_jwt, command=self.toggle_jwt_section)
         self.minimize_check.pack(side=tk.RIGHT, padx=5)
         
+        # Add edit button next to JWT section
+        edit_frame = ttk.Frame(self.jwt_section)
+        edit_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(edit_frame, text="JWT Decoded").pack(side=tk.LEFT, pady=5)
+        self.edit_button = ttk.Button(edit_frame, text="Edit JWT", command=self.edit_jwt)
+        self.edit_button.pack(side=tk.RIGHT, padx=5)
+        
         self.jwt_text = tk.Text(self.jwt_section, width=80, height=20)
         self.jwt_text.pack(padx=5, pady=5, fill=tk.BOTH, expand=True)
         
@@ -90,38 +97,104 @@ class HTTPRequestTool:
         self.testssl_button = ttk.Button(button_frame, text="Run TestSSL", command=self.run_testssl)
         self.testssl_button.pack(side=tk.LEFT, padx=5)
 
+    def is_jwt(self, token):
+        # Split the token into parts
+        parts = token.split('.')
+        
+        # We only care about header and body
+        if len(parts) < 2:
+            return False
+            
+        try:
+            # Check if header and body are valid base64
+            for part in parts[:2]:  # Only check header and body
+                if part:  # Skip empty parts
+                    # Add padding if needed
+                    padding = 4 - (len(part) % 4)
+                    if padding != 4:
+                        part += '=' * padding
+                    decoded = base64.b64decode(part)
+                    # Try to parse as JSON to verify structure
+                    json.loads(decoded)
+            return True
+        except:
+            return False
+
     def decode_jwt(self, token):
         try:
-            # Decode without verification
-            header = jwt.get_unverified_header(token)
-            payload = jwt.decode(token, options={"verify_signature": False})
+            # Split the token into parts
+            parts = token.split('.')
             
-            decoded = f"Header:\n{json.dumps(header, indent=2)}\n\nPayload:\n{json.dumps(payload, indent=2)}"
-            return decoded
-        except jwt.exceptions.DecodeError:
-            return "Invalid JWT format or encoding"
+            # We only care about header and body
+            if len(parts) < 2:
+                return "Invalid JWT format"
+            
+            # Decode header and body
+            decoded_parts = []
+            for part in parts[:2]:  # Only process header and body
+                if part:
+                    # Add padding if needed
+                    padding = 4 - (len(part) % 4)
+                    if padding != 4:
+                        part += '=' * padding
+                    decoded = base64.b64decode(part)
+                    try:
+                        # Try to parse as JSON
+                        decoded_parts.append(json.loads(decoded))
+                    except:
+                        # If not JSON, just use the decoded string
+                        decoded_parts.append(decoded.decode('utf-8'))
+            
+            # Format the output
+            output = []
+            if len(decoded_parts) >= 1:
+                output.append(f"Header:\n{json.dumps(decoded_parts[0], indent=2)}")
+            if len(decoded_parts) >= 2:
+                output.append(f"\nPayload:\n{json.dumps(decoded_parts[1], indent=2)}")
+                
+            return '\n'.join(output)
         except Exception as e:
             return f"Error decoding JWT: {str(e)}"
 
-    def is_jwt(self, token):
-        # Check if string matches JWT pattern (three base64-encoded sections separated by dots)
-        jwt_pattern = r'^[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+$'
-        return bool(re.match(jwt_pattern, token))
+    def encode_jwt(self, header, payload, signature=None):
+        try:
+            # Encode header and payload
+            encoded_header = base64.urlsafe_b64encode(
+                json.dumps(header).encode('utf-8')
+            ).decode('utf-8').rstrip('=')
+            
+            encoded_payload = base64.urlsafe_b64encode(
+                json.dumps(payload).encode('utf-8')
+            ).decode('utf-8').rstrip('=')
+            
+            # Construct the token
+            token_parts = [encoded_header, encoded_payload]
+            if signature:
+                token_parts.append(signature)
+            
+            return '.'.join(token_parts)
+        except Exception as e:
+            return f"Error encoding JWT: {str(e)}"
 
     def find_jwt(self, request_text):
         # Split request into words and check each for JWT pattern
         tokens = []
+        seen_tokens = set()  # Track seen tokens to avoid duplicates
         
-        # Split by common delimiters
-        words = re.split(r'[\s\n\r\t,\'\"{}()\[\]=&?]', request_text)
+        # Find all potential JWT patterns in the text
+        # This regex looks for base64 strings separated by dots
+        jwt_pattern = r'[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+(?:\.[A-Za-z0-9-_=]+)?'
+        potential_tokens = re.findall(jwt_pattern, request_text)
         
-        for word in words:
-            word = word.strip()
-            # Remove common wrapper characters
-            word = re.sub(r'^[\'\"]+|[\'\"]+$', '', word)
+        for token in potential_tokens:
+            # Clean up the token
+            token = token.strip()
+            token = re.sub(r'^[\'\"]+|[\'\"]+$', '', token)
             
-            if self.is_jwt(word):
-                tokens.append(word)
+            # Only process if we haven't seen this token before
+            if token not in seen_tokens and self.is_jwt(token):
+                tokens.append(token)
+                seen_tokens.add(token)
         
         # Return all found JWTs
         return tokens
@@ -374,6 +447,72 @@ class HTTPRequestTool:
                 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to perform attack: {str(e)}")
+
+    def edit_jwt(self):
+        # Get the current JWT content
+        jwt_content = self.jwt_text.get("1.0", tk.END).strip()
+        if not jwt_content or "No JWT tokens found" in jwt_content:
+            messagebox.showinfo("Info", "No JWT to edit")
+            return
+            
+        # Create edit window
+        edit_window = tk.Toplevel(self.root)
+        edit_window.title("Edit JWT")
+        edit_window.geometry("600x400")
+        
+        # Create text widgets for header and payload
+        header_frame = ttk.LabelFrame(edit_window, text="Header")
+        header_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        header_text = tk.Text(header_frame, width=80, height=10)
+        header_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        payload_frame = ttk.LabelFrame(edit_window, text="Payload")
+        payload_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        payload_text = tk.Text(payload_frame, width=80, height=10)
+        payload_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Parse current JWT content
+        try:
+            header_start = jwt_content.find("Header:") + 7
+            header_end = jwt_content.find("Payload:")
+            payload_start = header_end + 8
+            
+            header_json = json.loads(jwt_content[header_start:header_end].strip())
+            payload_json = json.loads(jwt_content[payload_start:].strip())
+            
+            # Populate text widgets
+            header_text.insert("1.0", json.dumps(header_json, indent=2))
+            payload_text.insert("1.0", json.dumps(payload_json, indent=2))
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to parse JWT: {str(e)}")
+            return
+        
+        # Add save button
+        def save_changes():
+            try:
+                # Get edited content
+                new_header = json.loads(header_text.get("1.0", tk.END).strip())
+                new_payload = json.loads(payload_text.get("1.0", tk.END).strip())
+                
+                # Re-encode the JWT
+                new_token = self.encode_jwt(new_header, new_payload)
+                
+                # Update the request text with the new token
+                current_request = self.request_text.get("1.0", tk.END)
+                # Find and replace the old token with the new one
+                # This is a simple replacement - you should make it more robust
+                updated_request = current_request.replace(jwt_content.split('\n')[0].split(':')[1].strip(), new_token)
+                self.request_text.delete("1.0", tk.END)
+                self.request_text.insert("1.0", updated_request)
+                
+                edit_window.destroy()
+                # Trigger text change to update decoded view
+                self.on_text_change()
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to save changes: {str(e)}")
+        
+        save_button = ttk.Button(edit_window, text="Save Changes", command=save_changes)
+        save_button.pack(pady=10)
 
 def main():
     root = tk.Tk()
