@@ -441,22 +441,14 @@ class HTTPRequestTool:
         secrets_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # Load existing secrets if file exists
-        if os.path.exists('jwt.secrets.list'):
-            with open('jwt.secrets.list', 'r') as f:
+        secrets_path = 'jwt_secrets/jwt.secrets.list'
+        if os.path.exists(secrets_path):
+            with open(secrets_path, 'r') as f:
                 secrets_text.insert("1.0", f.read())
         else:
-            # Add default secrets
-            default_secrets = """secret1
-secret
-password
-admin
-123456
-qwerty
-letmein
-welcome
-monkey
-sunshine"""
-            secrets_text.insert("1.0", default_secrets)
+            messagebox.showerror("Error", f"Secrets file not found at {secrets_path}")
+            secrets_window.destroy()
+            return
         
         # Add buttons frame
         buttons_frame = ttk.Frame(main_frame)
@@ -464,30 +456,13 @@ sunshine"""
         
         def save_secrets():
             try:
-                with open('jwt.secrets.list', 'w') as f:
+                with open(secrets_path, 'w') as f:
                     f.write(secrets_text.get("1.0", tk.END).strip())
                 messagebox.showinfo("Success", "Secrets list saved successfully")
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to save secrets list: {str(e)}")
         
-        def add_default_secrets():
-            current_text = secrets_text.get("1.0", tk.END).strip()
-            if current_text:
-                current_text += "\n"
-            secrets_text.delete("1.0", tk.END)
-            secrets_text.insert("1.0", current_text + """secret1
-secret
-password
-admin
-123456
-qwerty
-letmein
-welcome
-monkey
-sunshine""")
-        
         ttk.Button(buttons_frame, text="Save Changes", command=save_secrets).pack(side=tk.LEFT, padx=5)
-        ttk.Button(buttons_frame, text="Add Default Secrets", command=add_default_secrets).pack(side=tk.LEFT, padx=5)
 
     def run_jwt_attacks(self, attack_window):
         if self.unverified_sig_var.get():
@@ -640,12 +615,11 @@ sunshine""")
                 messagebox.showerror("Error", "hashcat is not installed. Please install hashcat to use this feature.")
                 return
             
-            # Check if jwt.secrets.list exists
-            if not os.path.exists('jwt.secrets.list'):
-                # Create a default secrets list if it doesn't exist
-                with open('jwt.secrets.list', 'w') as f:
-                    f.write("secret1\nsecret\npassword\nadmin\n123456\nqwerty\nletmein\nwelcome\nmonkey\nsunshine\n")
-                messagebox.showinfo("Info", "Created default jwt.secrets.list file with common secrets")
+            # Check if jwt.secrets.list exists in jwt_secrets folder
+            secrets_path = 'jwt_secrets/jwt.secrets.list'
+            if not os.path.exists(secrets_path):
+                messagebox.showerror("Error", f"Secrets file not found at {secrets_path}")
+                return
             
             # Create results window
             results_window = tk.Toplevel(self.root)
@@ -677,7 +651,7 @@ sunshine""")
                 try:
                     # Run hashcat with proper formatting
                     result = subprocess.run(
-                        ['hashcat', '-a', '0', '-m', '16500', 'temp_jwt.txt', 'jwt.secrets.list', '--show'],
+                        ['hashcat', '-a', '0', '-m', '16500', 'temp_jwt.txt', secrets_path, '--show'],
                         capture_output=True,
                         text=True
                     )
