@@ -181,18 +181,11 @@ class HTTPRequestTool:
         seen_tokens = set()  # Track seen tokens to avoid duplicates
         
         # Find all potential JWT patterns in the text
-        # This regex looks for base64 strings separated by dots, including in headers and cookies
-        jwt_pattern = r'(?:Authorization:\s*Bearer\s+|[Cc]ookie:\s*[^=]+=|[Hh]eader:\s*[^:]+:\s*)([A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+(?:\.[A-Za-z0-9-_=]+)?)'
+        # This regex looks for base64 strings separated by dots
+        jwt_pattern = r'[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+(?:\.[A-Za-z0-9-_=]+)?'
         potential_tokens = re.findall(jwt_pattern, request_text)
         
-        # Also look for standalone JWTs
-        standalone_pattern = r'(?<![A-Za-z0-9-_=])[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+(?:\.[A-Za-z0-9-_=]+)?(?![A-Za-z0-9-_=])'
-        standalone_tokens = re.findall(standalone_pattern, request_text)
-        
-        # Combine both lists
-        all_tokens = potential_tokens + standalone_tokens
-        
-        for token in all_tokens:
+        for token in potential_tokens:
             # Clean up the token
             token = token.strip()
             token = re.sub(r'^[\'\"]+|[\'\"]+$', '', token)
@@ -302,19 +295,15 @@ class HTTPRequestTool:
             if current_line < len(request_lines):
                 body = '\n'.join(request_lines[current_line + 1:]).strip()
             
-            # Parse URL and enforce HTTPS
+            # Parse URL
             if not path.startswith('http'):
                 # If host header exists, use it to construct full URL
                 host = headers.get('Host', '')
                 if host:
-                    # Always use HTTPS
-                    path = f"https://{host}{path}"
+                    scheme = 'https' if 'https' in host.lower() else 'http'
+                    path = f"{scheme}://{host}{path}"
                 else:
                     raise ValueError("No host specified in headers and path is not absolute URL")
-            else:
-                # If URL starts with http://, change it to https://
-                if path.startswith('http://'):
-                    path = path.replace('http://', 'https://', 1)
             
             # Send the request
             response = requests.request(
