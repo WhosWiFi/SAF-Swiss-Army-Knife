@@ -44,12 +44,14 @@ class HTTPRequestTool:
         self.minimize_check = ttk.Checkbutton(jwt_header, text="Minimize", variable=self.minimize_jwt, command=self.toggle_jwt_section)
         self.minimize_check.pack(side=tk.RIGHT, padx=5)
         
-        # Add edit button next to JWT section
+        # Add edit and sign buttons next to JWT section
         edit_frame = ttk.Frame(self.jwt_section)
         edit_frame.pack(fill=tk.X, pady=5)
         ttk.Label(edit_frame, text="JWT Decoded").pack(side=tk.LEFT, pady=5)
         self.edit_button = ttk.Button(edit_frame, text="Edit JWT", command=self.edit_jwt)
         self.edit_button.pack(side=tk.RIGHT, padx=5)
+        self.sign_button = ttk.Button(edit_frame, text="Sign JWT", command=self.sign_jwt_direct)
+        self.sign_button.pack(side=tk.RIGHT, padx=5)
         
         self.jwt_text = tk.Text(self.jwt_section, width=80, height=20)
         self.jwt_text.pack(padx=5, pady=5, fill=tk.BOTH, expand=True)
@@ -705,6 +707,117 @@ class HTTPRequestTool:
         except Exception as e:
             messagebox.showerror("Error", f"Failed to perform attack: {str(e)}")
 
+    def sign_jwt_direct(self):
+        # Get the current JWT content
+        jwt_content = self.jwt_text.get("1.0", tk.END).strip()
+        if not jwt_content or "No JWT tokens found" in jwt_content:
+            messagebox.showinfo("Info", "No JWT to sign")
+            return
+            
+        # Create sign window
+        sign_window = tk.Toplevel(self.root)
+        sign_window.title("Sign JWT")
+        sign_window.geometry("400x200")
+        
+        # Add secret key input
+        secret_frame = ttk.LabelFrame(sign_window, text="Sign JWT with Secret Key")
+        secret_frame.pack(fill=tk.X, padx=5, pady=10)
+        
+        help_label = ttk.Label(secret_frame, text="Enter secret key to sign the JWT:")
+        help_label.pack(anchor=tk.W, padx=5, pady=(5,0))
+        
+        secret_entry = ttk.Entry(secret_frame, width=40)
+        secret_entry.pack(fill=tk.X, padx=5, pady=5)
+        
+        def sign():
+            try:
+                secret_key = secret_entry.get().strip()
+                if not secret_key:
+                    messagebox.showerror("Error", "Please enter a secret key")
+                    return
+                
+                # Get the current JWT content
+                jwt_content = self.jwt_text.get("1.0", tk.END).strip()
+                
+                # Parse the current JWT content to get header and payload
+                try:
+                    header_start = jwt_content.find("Header:") + 7
+                    header_end = jwt_content.find("Payload:")
+                    payload_start = header_end + 8
+                    
+                    header_json = json.loads(jwt_content[header_start:header_end].strip())
+                    payload_json = json.loads(jwt_content[payload_start:].strip())
+                    
+                    # Create a new signed token with the current content
+                    new_token = jwt.encode(
+                        payload_json,
+                        secret_key,
+                        algorithm="HS256",
+                        headers=header_json
+                    )
+                    
+                    # Get the original request
+                    original_request = self.request_text.get("1.0", tk.END)
+                    
+                    # Find the JWT token in the request
+                    original_token = None
+                    
+                    # List of headers that might contain JWTs
+                    jwt_headers = [
+                        ('Authorization', 'Bearer '),
+                        ('Cookie', 'session='),
+                        ('Cookie', 'token='),
+                        ('Cookie', 'jwt='),
+                        ('X-Auth-Token', ''),
+                        ('X-JWT-Token', ''),
+                        ('X-Access-Token', ''),
+                        ('X-Token', '')
+                    ]
+                    
+                    # First try to find in common headers
+                    for line in original_request.split('\n'):
+                        for header, prefix in jwt_headers:
+                            if line.startswith(f"{header}:"):
+                                value = line.split(':', 1)[1].strip()
+                                if prefix:
+                                    if prefix in value:
+                                        original_token = value.split(prefix)[1].strip()
+                                        break
+                                else:
+                                    original_token = value.strip()
+                                    break
+                        if original_token:
+                            break
+                    
+                    # If not found in headers, look for any JWT pattern in the request
+                    if not original_token:
+                        jwt_pattern = r'[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]*'
+                        matches = re.findall(jwt_pattern, original_request)
+                        if matches:
+                            original_token = matches[0]
+                    
+                    if original_token:
+                        # Replace the token in the request
+                        updated_request = original_request.replace(original_token, new_token)
+                        
+                        # Update the request text
+                        self.request_text.delete("1.0", tk.END)
+                        self.request_text.insert("1.0", updated_request)
+                        
+                        sign_window.destroy()
+                        # Trigger text change to update decoded view
+                        self.on_text_change()
+                    else:
+                        messagebox.showerror("Error", "Could not find a JWT token in the request.\n\nMake sure you have a valid JWT in your request, either in:\n1. Authorization: Bearer header\n2. Cookie header (session, token, jwt)\n3. X-Auth-Token, X-JWT-Token, X-Access-Token headers\n4. Request body\n\nYou can use the 'Edit JWT' button to add a JWT to your request.")
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to parse current JWT content: {str(e)}")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to sign JWT: {str(e)}")
+        
+        # Add sign button
+        sign_button = ttk.Button(sign_window, text="Sign JWT", command=sign, width=15)
+        sign_button.pack(pady=10)
+
     def edit_jwt(self):
         # Get the current JWT content
         jwt_content = self.jwt_text.get("1.0", tk.END).strip()
@@ -715,7 +828,7 @@ class HTTPRequestTool:
         # Create edit window
         edit_window = tk.Toplevel(self.root)
         edit_window.title("Edit JWT")
-        edit_window.geometry("400x300")
+        edit_window.geometry("400x500")
         
         # Parse current JWT content
         try:
@@ -749,33 +862,52 @@ class HTTPRequestTool:
                     original_request = self.request_text.get("1.0", tk.END)
                     
                     # Find the JWT token in the request
-                    # Look for Authorization header with Bearer token
-                    auth_line = None
+                    original_token = None
+                    
+                    # List of headers that might contain JWTs
+                    jwt_headers = [
+                        ('Authorization', 'Bearer '),
+                        ('Cookie', 'session='),
+                        ('Cookie', 'token='),
+                        ('Cookie', 'jwt='),
+                        ('X-Auth-Token', ''),
+                        ('X-JWT-Token', ''),
+                        ('X-Access-Token', ''),
+                        ('X-Token', '')
+                    ]
+                    
+                    # First try to find in common headers
                     for line in original_request.split('\n'):
-                        if 'Authorization:' in line and 'Bearer' in line:
-                            auth_line = line
+                        for header, prefix in jwt_headers:
+                            if line.startswith(f"{header}:"):
+                                value = line.split(':', 1)[1].strip()
+                                if prefix:
+                                    if prefix in value:
+                                        original_token = value.split(prefix)[1].strip()
+                                        break
+                                else:
+                                    original_token = value.strip()
+                                    break
+                        if original_token:
                             break
                     
-                    if auth_line:
-                        # Extract the original token
-                        original_token = auth_line.split('Bearer ')[1].strip()
-                        parts = original_token.split('.')
+                    # If not found in headers, look for any JWT pattern in the request
+                    if not original_token:
+                        jwt_pattern = r'[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]*'
+                        matches = re.findall(jwt_pattern, original_request)
+                        if matches:
+                            original_token = matches[0]
+                    
+                    if original_token:
+                        # Create a new token with the edited content
+                        new_token = jwt.encode(
+                            new_payload,
+                            "",  # Empty secret for unsigned token
+                            algorithm="none",
+                            headers=new_header
+                        )
                         
-                        # Re-encode only the modified parts
-                        if json.dumps(header_json) != json.dumps(new_header):
-                            parts[0] = base64.urlsafe_b64encode(
-                                json.dumps(new_header).encode('utf-8')
-                            ).decode('utf-8').rstrip('=')
-                        
-                        if json.dumps(payload_json) != json.dumps(new_payload):
-                            parts[1] = base64.urlsafe_b64encode(
-                                json.dumps(new_payload).encode('utf-8')
-                            ).decode('utf-8').rstrip('=')
-                        
-                        # Reconstruct the token
-                        new_token = '.'.join(parts)
-                        
-                        # Replace the token in the request while maintaining the rest of the request
+                        # Replace the token in the request
                         updated_request = original_request.replace(original_token, new_token)
                         
                         # Update the request text
@@ -786,12 +918,50 @@ class HTTPRequestTool:
                         # Trigger text change to update decoded view
                         self.on_text_change()
                     else:
-                        messagebox.showerror("Error", "Could not find JWT token in request")
+                        # If no JWT found, add it to Authorization header
+                        new_token = jwt.encode(
+                            new_payload,
+                            "",  # Empty secret for unsigned token
+                            algorithm="none",
+                            headers=new_header
+                        )
+                        
+                        # Add Authorization header if it doesn't exist
+                        if 'Authorization:' not in original_request:
+                            # Find the first line after the request line
+                            lines = original_request.split('\n')
+                            if len(lines) > 1:
+                                # Insert Authorization header after the first line
+                                lines.insert(1, f"Authorization: Bearer {new_token}")
+                                updated_request = '\n'.join(lines)
+                            else:
+                                # If only one line, add header after it
+                                updated_request = f"{original_request}\nAuthorization: Bearer {new_token}"
+                        else:
+                            # Replace existing Authorization header
+                            updated_request = re.sub(
+                                r'Authorization:.*',
+                                f'Authorization: Bearer {new_token}',
+                                original_request
+                            )
+                        
+                        # Update the request text
+                        self.request_text.delete("1.0", tk.END)
+                        self.request_text.insert("1.0", updated_request)
+                        
+                        edit_window.destroy()
+                        # Trigger text change to update decoded view
+                        self.on_text_change()
                 except Exception as e:
                     messagebox.showerror("Error", f"Failed to save changes: {str(e)}")
             
-            save_button = ttk.Button(edit_window, text="Save Changes", command=save_changes)
-            save_button.pack(pady=10)
+            # Add buttons frame
+            buttons_frame = ttk.Frame(edit_window)
+            buttons_frame.pack(fill=tk.X, pady=10)
+            
+            # Make buttons more prominent
+            save_button = ttk.Button(buttons_frame, text="Save Changes", command=save_changes, width=15)
+            save_button.pack(side=tk.LEFT, padx=5, expand=True)
             
         except Exception as e:
             messagebox.showerror("Error", f"Failed to parse JWT: {str(e)}")
