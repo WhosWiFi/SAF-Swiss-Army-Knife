@@ -48,6 +48,18 @@ class HTTPRequestTool:
         edit_frame = ttk.Frame(self.jwt_section)
         edit_frame.pack(fill=tk.X, pady=5)
         ttk.Label(edit_frame, text="JWT Decoded").pack(side=tk.LEFT, pady=5)
+        
+        # Add secret key frame
+        secret_frame = ttk.Frame(edit_frame)
+        secret_frame.pack(side=tk.RIGHT, padx=5)
+        
+        self.use_secret = tk.BooleanVar(value=False)
+        self.secret_check = ttk.Checkbutton(secret_frame, text="Use Secret Key", variable=self.use_secret)
+        self.secret_check.pack(side=tk.LEFT, padx=5)
+        
+        self.secret_entry = ttk.Entry(secret_frame, width=20)
+        self.secret_entry.pack(side=tk.LEFT, padx=5)
+        
         self.edit_button = ttk.Button(edit_frame, text="Edit JWT", command=self.edit_jwt)
         self.edit_button.pack(side=tk.RIGHT, padx=5)
         self.sign_button = ttk.Button(edit_frame, text="Sign JWT", command=self.sign_jwt_direct)
@@ -898,35 +910,31 @@ class HTTPRequestTool:
                         if matches:
                             original_token = matches[0]
                     
-                    if original_token:
-                        # Create a new token with the edited content
+                    # Create a new token
+                    if self.use_secret.get():
+                        secret_key = self.secret_entry.get().strip()
+                        if not secret_key:
+                            messagebox.showerror("Error", "Please enter a secret key")
+                            return
+                        new_token = jwt.encode(
+                            new_payload,
+                            secret_key,
+                            algorithm="HS256",
+                            headers=new_header
+                        )
+                    else:
                         new_token = jwt.encode(
                             new_payload,
                             "",  # Empty secret for unsigned token
                             algorithm="none",
                             headers=new_header
                         )
-                        
+                    
+                    if original_token:
                         # Replace the token in the request
                         updated_request = original_request.replace(original_token, new_token)
-                        
-                        # Update the request text
-                        self.request_text.delete("1.0", tk.END)
-                        self.request_text.insert("1.0", updated_request)
-                        
-                        edit_window.destroy()
-                        # Trigger text change to update decoded view
-                        self.on_text_change()
                     else:
                         # If no JWT found, add it to Authorization header
-                        new_token = jwt.encode(
-                            new_payload,
-                            "",  # Empty secret for unsigned token
-                            algorithm="none",
-                            headers=new_header
-                        )
-                        
-                        # Add Authorization header if it doesn't exist
                         if 'Authorization:' not in original_request:
                             # Find the first line after the request line
                             lines = original_request.split('\n')
@@ -944,14 +952,14 @@ class HTTPRequestTool:
                                 f'Authorization: Bearer {new_token}',
                                 original_request
                             )
-                        
-                        # Update the request text
-                        self.request_text.delete("1.0", tk.END)
-                        self.request_text.insert("1.0", updated_request)
-                        
-                        edit_window.destroy()
-                        # Trigger text change to update decoded view
-                        self.on_text_change()
+                    
+                    # Update the request text
+                    self.request_text.delete("1.0", tk.END)
+                    self.request_text.insert("1.0", updated_request)
+                    
+                    edit_window.destroy()
+                    # Trigger text change to update decoded view
+                    self.on_text_change()
                 except Exception as e:
                     messagebox.showerror("Error", f"Failed to save changes: {str(e)}")
             
