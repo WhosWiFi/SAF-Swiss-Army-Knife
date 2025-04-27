@@ -181,16 +181,40 @@ class HTTPRequestTool:
         seen_tokens = set()  # Track seen tokens to avoid duplicates
         
         # Find all potential JWT patterns in the text
-        # This regex looks for base64 strings separated by dots
-        jwt_pattern = r'[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+(?:\.[A-Za-z0-9-_=]+)?'
-        potential_tokens = re.findall(jwt_pattern, request_text)
+        # This regex looks for base64 strings separated by dots, allowing for more flexible patterns
+        jwt_pattern = r'(?:Bearer\s+)?([A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+(?:\.[A-Za-z0-9-_=]+)?)'
         
-        for token in potential_tokens:
-            # Clean up the token
-            token = token.strip()
-            token = re.sub(r'^[\'\"]+|[\'\"]+$', '', token)
+        # Look for JWTs in headers
+        for line in request_text.split('\n'):
+            # Check for Authorization header
+            if 'Authorization:' in line:
+                matches = re.findall(jwt_pattern, line)
+                for token in matches:
+                    if token not in seen_tokens and self.is_jwt(token):
+                        tokens.append(token)
+                        seen_tokens.add(token)
             
-            # Only process if we haven't seen this token before
+            # Check for Cookie header
+            if 'Cookie:' in line:
+                # Look for session cookies that might contain JWTs
+                cookie_matches = re.findall(r'session=([^;,\s]+)', line)
+                for token in cookie_matches:
+                    if token not in seen_tokens and self.is_jwt(token):
+                        tokens.append(token)
+                        seen_tokens.add(token)
+            
+            # Check for other potential JWT-containing headers
+            if ':' in line:
+                header_value = line.split(':', 1)[1].strip()
+                matches = re.findall(jwt_pattern, header_value)
+                for token in matches:
+                    if token not in seen_tokens and self.is_jwt(token):
+                        tokens.append(token)
+                        seen_tokens.add(token)
+        
+        # Also check the entire text for any JWTs we might have missed
+        all_matches = re.findall(jwt_pattern, request_text)
+        for token in all_matches:
             if token not in seen_tokens and self.is_jwt(token):
                 tokens.append(token)
                 seen_tokens.add(token)
@@ -295,15 +319,19 @@ class HTTPRequestTool:
             if current_line < len(request_lines):
                 body = '\n'.join(request_lines[current_line + 1:]).strip()
             
-            # Parse URL
+            # Parse URL and enforce HTTPS
             if not path.startswith('http'):
                 # If host header exists, use it to construct full URL
                 host = headers.get('Host', '')
                 if host:
-                    scheme = 'https' if 'https' in host.lower() else 'http'
-                    path = f"{scheme}://{host}{path}"
+                    # Always use HTTPS
+                    path = f"https://{host}{path}"
                 else:
                     raise ValueError("No host specified in headers and path is not absolute URL")
+            else:
+                # If URL starts with http://, change it to https://
+                if path.startswith('http://'):
+                    path = path.replace('http://', 'https://', 1)
             
             # Send the request
             response = requests.request(
@@ -389,8 +417,77 @@ class HTTPRequestTool:
         self.brute_force_var = tk.BooleanVar()
         ttk.Checkbutton(attack_frame, text="Brute Force Secret Key", variable=self.brute_force_var).pack(anchor=tk.W, pady=5)
         
+        # Add button to manage secrets list
+        ttk.Button(attack_frame, text="Manage Secrets List", command=self.manage_secrets_list).pack(pady=5)
+        
         # Add run button
         ttk.Button(attack_frame, text="Run Selected Attacks", command=lambda: self.run_jwt_attacks(attack_window)).pack(pady=10)
+
+    def manage_secrets_list(self):
+        # Create window for managing secrets
+        secrets_window = tk.Toplevel(self.root)
+        secrets_window.title("Manage JWT Secrets")
+        secrets_window.geometry("600x400")
+        
+        # Create main frame
+        main_frame = ttk.Frame(secrets_window)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Create text area for secrets
+        secrets_frame = ttk.LabelFrame(main_frame, text="JWT Secrets List")
+        secrets_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        
+        secrets_text = tk.Text(secrets_frame, wrap=tk.WORD)
+        secrets_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Load existing secrets if file exists
+        if os.path.exists('jwt.secrets.list'):
+            with open('jwt.secrets.list', 'r') as f:
+                secrets_text.insert("1.0", f.read())
+        else:
+            # Add default secrets
+            default_secrets = """secret1
+secret
+password
+admin
+123456
+qwerty
+letmein
+welcome
+monkey
+sunshine"""
+            secrets_text.insert("1.0", default_secrets)
+        
+        # Add buttons frame
+        buttons_frame = ttk.Frame(main_frame)
+        buttons_frame.pack(fill=tk.X, pady=5)
+        
+        def save_secrets():
+            try:
+                with open('jwt.secrets.list', 'w') as f:
+                    f.write(secrets_text.get("1.0", tk.END).strip())
+                messagebox.showinfo("Success", "Secrets list saved successfully")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to save secrets list: {str(e)}")
+        
+        def add_default_secrets():
+            current_text = secrets_text.get("1.0", tk.END).strip()
+            if current_text:
+                current_text += "\n"
+            secrets_text.delete("1.0", tk.END)
+            secrets_text.insert("1.0", current_text + """secret1
+secret
+password
+admin
+123456
+qwerty
+letmein
+welcome
+monkey
+sunshine""")
+        
+        ttk.Button(buttons_frame, text="Save Changes", command=save_secrets).pack(side=tk.LEFT, padx=5)
+        ttk.Button(buttons_frame, text="Add Default Secrets", command=add_default_secrets).pack(side=tk.LEFT, padx=5)
 
     def run_jwt_attacks(self, attack_window):
         if self.unverified_sig_var.get():
@@ -578,9 +675,9 @@ class HTTPRequestTool:
             
             def run_hashcat():
                 try:
-                    # Run hashcat
+                    # Run hashcat with proper formatting
                     result = subprocess.run(
-                        ['hashcat', '-a', '0', '-m', '16500', 'temp_jwt.txt', 'jwt.secrets.list'],
+                        ['hashcat', '-a', '0', '-m', '16500', 'temp_jwt.txt', 'jwt.secrets.list', '--show'],
                         capture_output=True,
                         text=True
                     )
@@ -595,20 +692,24 @@ class HTTPRequestTool:
                 progress.pack_forget()
                 progress_label.config(text="Hashcat completed")
                 
+                # Display the full output
                 output_text.insert("1.0", result.stdout)
                 if result.stderr:
                     output_text.insert(tk.END, f"\nErrors:\n{result.stderr}")
                 
-                # Check if we found a secret
-                if "Cracked" in result.stdout:
-                    # Extract the secret
+                # Parse the output to find the secret
+                if result.stdout:
+                    # Look for the JWT in the output
                     for line in result.stdout.split('\n'):
                         if jwt_token in line:
-                            secret = line.split(':')[-1].strip()
-                            messagebox.showinfo("Success", f"Found secret key: {secret}")
-                            break
-                else:
-                    messagebox.showinfo("Result", "No secret key found in the dictionary")
+                            # The secret should be after the JWT
+                            parts = line.split(':')
+                            if len(parts) > 1:
+                                secret = parts[-1].strip()
+                                messagebox.showinfo("Success", f"Found secret key: {secret}")
+                                break
+                    else:
+                        messagebox.showinfo("Result", "No secret key found in the dictionary")
                 
                 # Clean up
                 try:
