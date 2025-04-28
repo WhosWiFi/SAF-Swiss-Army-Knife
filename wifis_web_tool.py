@@ -1895,7 +1895,7 @@ class HTTPRequestTool:
                 trace_text.insert(tk.END, "\n")
             
             # Configure highlight tag
-            trace_text.tag_configure('highlight', background='yellow')
+            trace_text.tag_configure('highlight', background='#ffcccc', foreground='black')
 
 def main():
     root = tk.Tk()
