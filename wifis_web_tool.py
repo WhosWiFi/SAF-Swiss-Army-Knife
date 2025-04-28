@@ -1638,10 +1638,38 @@ class HTTPRequestTool:
                 r'\b(169\.254\.\d{1,3}\.\d{1,3})\b',  # 169.254.0.0/16
             ],
             "Hardcoded URLs": [
-                r'https?://(?!(fonts\.googleapis\.com|fonts\.gstatic\.com|cdn\.jsdelivr\.net|unpkg\.com|cdnjs\.cloudflare\.com|ajax\.googleapis\.com|code\.jquery\.com|maxcdn\.bootstrapcdn\.com|stackpath\.bootstrapcdn\.com|cdn\.bootstrapcdn\.com|cdn\.datatables\.net|cdn\.materialdesignicons\.com|cdn\.mozilla\.org|cdn\.polyfill\.io|cdn\.rawgit\.com|cdn\.socket\.io|cdn\.tinymce\.com|cdn\.wysiwyg\.com|cdn\.xss\.org|cdn\.yandex\.net|cdn\.yandex\.ru|cdn\.yandex\.com|youtube\.com|w3\.org))[^\s<>"]+',
+                r'https?://[^\s<>"]+',  # Simple URL pattern
             ]
         }
-        
+
+        # List of allowed domains (not to be flagged)
+        allowed_domains = [
+            'fonts.googleapis.com',
+            'fonts.gstatic.com',
+            'cdn.jsdelivr.net',
+            'unpkg.com',
+            'cdnjs.cloudflare.com',
+            'ajax.googleapis.com',
+            'code.jquery.com',
+            'maxcdn.bootstrapcdn.com',
+            'stackpath.bootstrapcdn.com',
+            'cdn.bootstrapcdn.com',
+            'cdn.datatables.net',
+            'cdn.materialdesignicons.com',
+            'cdn.mozilla.org',
+            'cdn.polyfill.io',
+            'cdn.rawgit.com',
+            'cdn.socket.io',
+            'cdn.tinymce.com',
+            'cdn.wysiwyg.com',
+            'cdn.xss.org',
+            'cdn.yandex.net',
+            'cdn.yandex.ru',
+            'cdn.yandex.com',
+            'youtube.com',
+            'w3.org'
+        ]
+
         def analyze_content():
             content = input_text.get("1.0", tk.END).strip()
             if not content:
@@ -1662,6 +1690,12 @@ class HTTPRequestTool:
                     for pattern in patterns:
                         matches = re.finditer(pattern, content, re.IGNORECASE)
                         for match in matches:
+                            # For URLs, check if it's in the allowed list
+                            if category == "Hardcoded URLs":
+                                url = match.group(0)
+                                if any(domain in url for domain in allowed_domains):
+                                    continue  # Skip if URL is in allowed list
+                            
                             start, end = match.span()
                             line_number = content[:start].count('\n') + 1
                             line_start = content.rfind('\n', 0, start) + 1
