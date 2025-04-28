@@ -1827,50 +1827,75 @@ class HTTPRequestTool:
                     line_end = len(content)
                 current_line = content[line_start:line_end].strip()
                 
-                # Get 2 lines before
-                lines_before = []
-                before_start = line_start
-                for _ in range(2):
-                    before_start = content.rfind('\n', 0, before_start - 1)
-                    if before_start == -1:
-                        break
+                # Get 1 line before
+                line_before = ""
+                before_start = content.rfind('\n', 0, line_start - 1)
+                if before_start != -1:
                     prev_line_start = content.rfind('\n', 0, before_start) + 1
-                    prev_line = content[prev_line_start:before_start].strip()
-                    lines_before.insert(0, prev_line)
+                    line_before = content[prev_line_start:before_start].strip()
                 
-                # Get 2 lines after
-                lines_after = []
-                after_end = line_end
-                for _ in range(2):
-                    after_end = content.find('\n', after_end + 1)
-                    if after_end == -1:
-                        break
+                # Get 1 line after
+                line_after = ""
+                after_end = content.find('\n', line_end + 1)
+                if after_end != -1:
                     next_line_end = content.find('\n', after_end + 1)
                     if next_line_end == -1:
                         next_line_end = len(content)
-                    next_line = content[after_end + 1:next_line_end].strip()
-                    lines_after.append(next_line)
+                    line_after = content[after_end + 1:next_line_end].strip()
                 
                 # Display the context
                 trace_text.insert(tk.END, f"Occurrence {i} (Line {line_number}):\n")
                 
-                # Show lines before
-                for line in lines_before:
-                    trace_text.insert(tk.END, f"{line_number - len(lines_before) + lines_before.index(line)}: {line}\n")
+                # Show line before with highlights
+                if line_before:
+                    trace_text.insert(tk.END, f"{line_number - 1}: ")
+                    # Find and highlight all occurrences in the previous line
+                    prev_matches = list(re.finditer(pattern, line_before))
+                    if prev_matches:
+                        last_end = 0
+                        for m in prev_matches:
+                            trace_text.insert(tk.END, line_before[last_end:m.start()])
+                            trace_text.insert(tk.END, line_before[m.start():m.end()], 'highlight')
+                            last_end = m.end()
+                        trace_text.insert(tk.END, line_before[last_end:] + "\n")
+                    else:
+                        trace_text.insert(tk.END, line_before + "\n")
                 
                 # Show current line with highlight
                 match_start = start - line_start
                 match_end = end - line_start
                 trace_text.insert(tk.END, f"{line_number}: ")
-                trace_text.insert(tk.END, current_line[:match_start])
-                trace_text.insert(tk.END, current_line[match_start:match_end], 'highlight')
-                trace_text.insert(tk.END, current_line[match_end:] + "\n")
+                # Find and highlight all occurrences in the current line
+                curr_matches = list(re.finditer(pattern, current_line))
+                if curr_matches:
+                    last_end = 0
+                    for m in curr_matches:
+                        trace_text.insert(tk.END, current_line[last_end:m.start()])
+                        trace_text.insert(tk.END, current_line[m.start():m.end()], 'highlight')
+                        last_end = m.end()
+                    trace_text.insert(tk.END, current_line[last_end:] + "\n")
+                else:
+                    trace_text.insert(tk.END, current_line + "\n")
                 
-                # Show lines after
-                for line in lines_after:
-                    trace_text.insert(tk.END, f"{line_number + 1 + lines_after.index(line)}: {line}\n")
+                # Show line after with highlights
+                if line_after:
+                    trace_text.insert(tk.END, f"{line_number + 1}: ")
+                    # Find and highlight all occurrences in the next line
+                    next_matches = list(re.finditer(pattern, line_after))
+                    if next_matches:
+                        last_end = 0
+                        for m in next_matches:
+                            trace_text.insert(tk.END, line_after[last_end:m.start()])
+                            trace_text.insert(tk.END, line_after[m.start():m.end()], 'highlight')
+                            last_end = m.end()
+                        trace_text.insert(tk.END, line_after[last_end:] + "\n")
+                    else:
+                        trace_text.insert(tk.END, line_after + "\n")
                 
                 trace_text.insert(tk.END, "\n")
+            
+            # Configure highlight tag
+            trace_text.tag_configure('highlight', background='yellow')
 
 def main():
     root = tk.Tk()
