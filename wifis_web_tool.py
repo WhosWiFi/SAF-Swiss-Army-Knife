@@ -1576,6 +1576,9 @@ class HTTPRequestTool:
                 r'credentials["\']?\s*[:=]\s*["\'][^"\']{8,}["\']',
                 r'auth["\']?\s*[:=]\s*["\'][^"\']{8,}["\']',
                 r'authentication["\']?\s*[:=]\s*["\'][^"\']{8,}["\']',
+                r'Password:\s*([^<>\n]+)',  # HTML format
+                r'password:\s*([^<>\n]+)',  # HTML format
+                r'pass:\s*([^<>\n]+)',      # HTML format
             ],
             "Database Credentials": [
                 r'db[_-]?password["\']?\s*[:=]\s*["\'][^"\']{8,}["\']',
@@ -1592,6 +1595,8 @@ class HTTPRequestTool:
                 r'connection[_-]?uri["\']?\s*[:=]\s*["\'][^"\']{8,}["\']',
                 r'db[_-]?uri["\']?\s*[:=]\s*["\'][^"\']{8,}["\']',
                 r'database[_-]?uri["\']?\s*[:=]\s*["\'][^"\']{8,}["\']',
+                r'DB_[A-Z_]+["\']?\s*[:=]\s*["\'][^"\']+["\']',  # Environment variables
+                r'DB_[A-Z_]+=\s*[^"\'\n]+',  # Environment variables without quotes
             ],
             "JWT Tokens": [
                 r'eyJ[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*',
@@ -1599,15 +1604,21 @@ class HTTPRequestTool:
             "AWS Credentials": [
                 r'aws[_-]?access[_-]?key[_-]?id["\']?\s*[:=]\s*["\'][A-Z0-9]{20}["\']',
                 r'aws[_-]?secret[_-]?access[_-]?key["\']?\s*[:=]\s*["\'][A-Za-z0-9/+=]{40}["\']',
+                r'aws_access_key_id\s*=\s*[A-Z0-9]{20}',  # AWS config format
+                r'aws_secret_access_key\s*=\s*[A-Za-z0-9/+=]{40}',  # AWS config format
             ],
             "Email Addresses": [
                 r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',
                 r'mailto:[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',
+                r'Email:\s*([^<>\n]+)',  # HTML format
+                r'email:\s*([^<>\n]+)',  # HTML format
             ],
             "Phone Numbers": [
                 r'\b(?:\+?(\d{1,3}))?[-. (]*(\d{3})[-. )]*(\d{3})[-. ]*(\d{4})\b',  # US/Canada format
                 r'\b(?:\+?(\d{1,3}))?[-. (]*(\d{2})[-. )]*(\d{4})[-. ]*(\d{4})\b',  # International format
                 r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b',  # Simple format
+                r'Phone:\s*([^<>\n]+)',  # HTML format
+                r'phone:\s*([^<>\n]+)',  # HTML format
             ],
             "Credit Card Numbers": [
                 r'\b(?:4[0-9]{12}(?:[0-9]{3})?)\b',  # Visa
@@ -1616,6 +1627,9 @@ class HTTPRequestTool:
                 r'\b(?:3(?:0[0-5]|[68][0-9])[0-9]{11})\b',  # Diners Club
                 r'\b(?:6(?:011|5[0-9]{2})[0-9]{12})\b',  # Discover
                 r'\b(?:35[2-8][0-9]{13})\b',  # JCB
+                r'Credit Card Number:\s*([^<>\n]+)',  # HTML format
+                r'credit card:\s*([^<>\n]+)',  # HTML format
+                r'card number:\s*([^<>\n]+)',  # HTML format
             ],
             "Internal IP Addresses": [
                 r'\b(10\.\d{1,3}\.\d{1,3}\.\d{1,3})\b',  # 10.0.0.0/8
