@@ -1638,7 +1638,7 @@ class HTTPRequestTool:
                 r'\b(169\.254\.\d{1,3}\.\d{1,3})\b',  # 169.254.0.0/16
             ],
             "Hardcoded URLs": [
-                r'https?://(?:(?!fonts\.googleapis\.com|fonts\.gstatic\.com|cdn\.jsdelivr\.net|unpkg\.com|cdnjs\.cloudflare\.com|ajax\.googleapis\.com|code\.jquery\.com|maxcdn\.bootstrapcdn\.com|stackpath\.bootstrapcdn\.com|cdn\.bootstrapcdn\.com|cdn\.datatables\.net|cdn\.materialdesignicons\.com|cdn\.mozilla\.org|cdn\.polyfill\.io|cdn\.rawgit\.com|cdn\.socket\.io|cdn\.tinymce\.com|cdn\.wysiwyg\.com|cdn\.xss\.org|cdn\.yandex\.net|cdn\.yandex\.ru|cdn\.yandex\.com|youtube\.com|w3\.org)[^\s<>"]+)',
+                r'https?://(?!(fonts\.googleapis\.com|fonts\.gstatic\.com|cdn\.jsdelivr\.net|unpkg\.com|cdnjs\.cloudflare\.com|ajax\.googleapis\.com|code\.jquery\.com|maxcdn\.bootstrapcdn\.com|stackpath\.bootstrapcdn\.com|cdn\.bootstrapcdn\.com|cdn\.datatables\.net|cdn\.materialdesignicons\.com|cdn\.mozilla\.org|cdn\.polyfill\.io|cdn\.rawgit\.com|cdn\.socket\.io|cdn\.tinymce\.com|cdn\.wysiwyg\.com|cdn\.xss\.org|cdn\.yandex\.net|cdn\.yandex\.ru|cdn\.yandex\.com|youtube\.com|w3\.org))[^\s<>"]+',
             ]
         }
         
