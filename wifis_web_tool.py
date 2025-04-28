@@ -1774,6 +1774,73 @@ class HTTPRequestTool:
         analyze_button = ttk.Button(main_frame, text="Analyze Content", command=analyze_content)
         analyze_button.pack(pady=10)
 
+        # Add trace variable/function button
+        trace_button = ttk.Button(main_frame, text="Trace Variable/Function", command=lambda: trace_variable_function())
+        trace_button.pack(pady=10)
+
+        def trace_variable_function():
+            # Get the content to search through
+            content = input_text.get("1.0", tk.END).strip()
+            if not content:
+                messagebox.showerror("Error", "Please paste some content to analyze")
+                return
+
+            # Ask for the variable/function name to trace
+            target = simpledialog.askstring("Trace Variable/Function", "Enter variable or function name to trace:")
+            if not target:
+                return
+
+            # Create a new window for results
+            trace_window = tk.Toplevel(analysis_window)
+            trace_window.title(f"Trace Results for: {target}")
+            trace_window.geometry("1000x800")
+
+            # Create text area for results
+            trace_text = tk.Text(trace_window, wrap=tk.WORD)
+            trace_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+            # Add scrollbar
+            scrollbar = ttk.Scrollbar(trace_text)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            trace_text.config(yscrollcommand=scrollbar.set)
+            scrollbar.config(command=trace_text.yview)
+
+            # Search for exact matches
+            pattern = r'\b' + re.escape(target) + r'\b'
+            matches = list(re.finditer(pattern, content))
+
+            if not matches:
+                trace_text.insert("1.0", f"No occurrences of '{target}' found.")
+                return
+
+            # Display results
+            trace_text.insert("1.0", f"Found {len(matches)} occurrences of '{target}':\n\n")
+            
+            for i, match in enumerate(matches, 1):
+                start, end = match.span()
+                line_number = content[:start].count('\n') + 1
+                
+                # Get context (2 lines before and after)
+                line_start = content.rfind('\n', 0, start) + 1
+                line_end = content.find('\n', end)
+                if line_end == -1:
+                    line_end = len(content)
+                
+                # Get the full line
+                line = content[line_start:line_end].strip()
+                
+                # Highlight the match in the line
+                match_start = start - line_start
+                match_end = end - line_start
+                
+                trace_text.insert(tk.END, f"Occurrence {i} (Line {line_number}):\n")
+                trace_text.insert(tk.END, line[:match_start])
+                trace_text.insert(tk.END, line[match_start:match_end], 'highlight')
+                trace_text.insert(tk.END, line[match_end:] + "\n\n")
+            
+            # Configure highlight tag
+            trace_text.tag_configure('highlight', background='yellow')
+
 def main():
     root = tk.Tk()
     app = HTTPRequestTool(root)
