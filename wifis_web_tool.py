@@ -1700,10 +1700,17 @@ class HTTPRequestTool:
                             # For URLs, check if it's in the allowed list
                             if category == "Hardcoded URLs":
                                 url = match.group(0)
-                                # Extract domain from URL
-                                domain = url.split('://')[1].split('/')[0]
-                                # Check if domain is in allowed list
-                                if domain in allowed_domains or any(domain.endswith('.' + d) for d in allowed_domains):
+                                # Extract domain from URL and clean it
+                                domain = url.split('://')[1].split('/')[0].lower()
+                                # Remove any trailing dots or dashes
+                                domain = domain.rstrip('.-')
+                                # Check if domain is in allowed list or is a subdomain of an allowed domain
+                                is_allowed = False
+                                for allowed in allowed_domains:
+                                    if domain == allowed.lower() or domain.endswith('.' + allowed.lower()):
+                                        is_allowed = True
+                                        break
+                                if is_allowed:
                                     continue  # Skip if URL is in allowed list
                             
                             start, end = match.span()
