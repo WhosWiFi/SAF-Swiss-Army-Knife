@@ -1698,19 +1698,32 @@ class HTTPRequestTool:
                             # For URLs, check if it's in the allowed list
                             if category == "Hardcoded URLs":
                                 url = match.group(0)
-                                # Extract domain from URL and clean it
-                                domain = url.split('://')[1].split('/')[0].lower()
-                                # Remove any trailing dots, dashes, or numbers
-                                domain = re.sub(r'[.-]+\d*$', '', domain)
-                                # Check if domain is in allowed list or is a subdomain of an allowed domain
+                                # Extract domain from URL
+                                domain = url.split('://')[1].split('/')[0]
+                                
+                                # Check if domain is in allowed list
                                 is_allowed = False
                                 for allowed in allowed_domains:
-                                    allowed = allowed.lower()
-                                    if domain == allowed or domain.endswith('.' + allowed):
+                                    # Check for exact match
+                                    if domain == allowed:
                                         is_allowed = True
                                         break
+                                    # Check for subdomain match (e.g., support.whatfix.com matches whatfix.com)
+                                    if domain.endswith('.' + allowed):
+                                        is_allowed = True
+                                        break
+                                
+                                # If not allowed, check if it's a partial match that should be ignored
+                                if not is_allowed:
+                                    # List of partial matches to ignore
+                                    ignore_partials = ['wfx-', 'www.w3']
+                                    for partial in ignore_partials:
+                                        if partial in domain:
+                                            is_allowed = True
+                                            break
+                                
                                 if is_allowed:
-                                    continue  # Skip if URL is in allowed list
+                                    continue  # Skip if URL is in allowed list or should be ignored
                             
                             start, end = match.span()
                             line_number = content[:start].count('\n') + 1
