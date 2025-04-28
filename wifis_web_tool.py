@@ -1669,10 +1669,8 @@ class HTTPRequestTool:
             'youtube.com',
             'w3.org',
             'whatfix.com',
-            'www.w3',
             'googleapis.com',
             'google.com',
-            'www.wfx',
             'microsoftedge.microsoft.com',
             'support.whatfix.com'
         ]
@@ -1702,12 +1700,13 @@ class HTTPRequestTool:
                                 url = match.group(0)
                                 # Extract domain from URL and clean it
                                 domain = url.split('://')[1].split('/')[0].lower()
-                                # Remove any trailing dots or dashes
-                                domain = domain.rstrip('.-')
+                                # Remove any trailing dots, dashes, or numbers
+                                domain = re.sub(r'[.-]+\d*$', '', domain)
                                 # Check if domain is in allowed list or is a subdomain of an allowed domain
                                 is_allowed = False
                                 for allowed in allowed_domains:
-                                    if domain == allowed.lower() or domain.endswith('.' + allowed.lower()):
+                                    allowed = allowed.lower()
+                                    if domain == allowed or domain.endswith('.' + allowed):
                                         is_allowed = True
                                         break
                                 if is_allowed:
