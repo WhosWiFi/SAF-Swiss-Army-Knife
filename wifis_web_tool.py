@@ -1820,26 +1820,57 @@ class HTTPRequestTool:
                 start, end = match.span()
                 line_number = content[:start].count('\n') + 1
                 
-                # Get context (2 lines before and after)
+                # Get the current line
                 line_start = content.rfind('\n', 0, start) + 1
                 line_end = content.find('\n', end)
                 if line_end == -1:
                     line_end = len(content)
+                current_line = content[line_start:line_end].strip()
                 
-                # Get the full line
-                line = content[line_start:line_end].strip()
+                # Get 2 lines before
+                lines_before = []
+                before_start = line_start
+                for _ in range(2):
+                    before_start = content.rfind('\n', 0, before_start - 1)
+                    if before_start == -1:
+                        break
+                    prev_line_start = content.rfind('\n', 0, before_start) + 1
+                    prev_line = content[prev_line_start:before_start].strip()
+                    lines_before.insert(0, prev_line)
                 
-                # Highlight the match in the line
+                # Get 2 lines after
+                lines_after = []
+                after_end = line_end
+                for _ in range(2):
+                    after_end = content.find('\n', after_end + 1)
+                    if after_end == -1:
+                        break
+                    next_line_end = content.find('\n', after_end + 1)
+                    if next_line_end == -1:
+                        next_line_end = len(content)
+                    next_line = content[after_end + 1:next_line_end].strip()
+                    lines_after.append(next_line)
+                
+                # Display the context
+                trace_text.insert(tk.END, f"Occurrence {i} (Line {line_number}):\n")
+                
+                # Show lines before
+                for line in lines_before:
+                    trace_text.insert(tk.END, f"{line_number - len(lines_before) + lines_before.index(line)}: {line}\n")
+                
+                # Show current line with highlight
                 match_start = start - line_start
                 match_end = end - line_start
+                trace_text.insert(tk.END, f"{line_number}: ")
+                trace_text.insert(tk.END, current_line[:match_start])
+                trace_text.insert(tk.END, current_line[match_start:match_end], 'highlight')
+                trace_text.insert(tk.END, current_line[match_end:] + "\n")
                 
-                trace_text.insert(tk.END, f"Occurrence {i} (Line {line_number}):\n")
-                trace_text.insert(tk.END, line[:match_start])
-                trace_text.insert(tk.END, line[match_start:match_end], 'highlight')
-                trace_text.insert(tk.END, line[match_end:] + "\n\n")
-            
-            # Configure highlight tag
-            trace_text.tag_configure('highlight', background='yellow')
+                # Show lines after
+                for line in lines_after:
+                    trace_text.insert(tk.END, f"{line_number + 1 + lines_after.index(line)}: {line}\n")
+                
+                trace_text.insert(tk.END, "\n")
 
 def main():
     root = tk.Tk()
