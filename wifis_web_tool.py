@@ -112,6 +112,26 @@ class HTTPRequestTool:
         # Add Check for Common Files button
         self.check_files_button = ttk.Button(button_frame, text="Check for Common Files", command=self.check_common_files)
         self.check_files_button.pack(side=tk.LEFT, padx=5)
+        
+        # Add proxy configuration frame
+        proxy_frame = ttk.Frame(self.request_frame)
+        proxy_frame.pack(fill=tk.X, pady=5)
+        
+        # Add proxy checkbox
+        self.use_proxy = tk.BooleanVar(value=False)
+        self.proxy_check = ttk.Checkbutton(proxy_frame, text="Use Burp Proxy", variable=self.use_proxy)
+        self.proxy_check.pack(side=tk.LEFT, padx=5)
+        
+        # Add proxy address entry
+        ttk.Label(proxy_frame, text="Proxy Address:").pack(side=tk.LEFT, padx=5)
+        self.proxy_address = ttk.Entry(proxy_frame, width=30)
+        self.proxy_address.insert(0, "http://127.0.0.1:8080")  # Default Burp proxy address
+        self.proxy_address.pack(side=tk.LEFT, padx=5)
+        
+        # Add proxy CA cert checkbox
+        self.verify_cert = tk.BooleanVar(value=False)
+        self.cert_check = ttk.Checkbutton(proxy_frame, text="Verify Proxy Cert", variable=self.verify_cert)
+        self.cert_check.pack(side=tk.LEFT, padx=5)
 
     def is_jwt(self, token):
         # Split the token into parts
@@ -350,13 +370,29 @@ class HTTPRequestTool:
                 if path.startswith('http://'):
                     path = path.replace('http://', 'https://', 1)
             
+            # Configure proxy if enabled
+            proxies = None
+            verify = True
+            if self.use_proxy.get():
+                proxy_address = self.proxy_address.get().strip()
+                if not proxy_address:
+                    messagebox.showerror("Error", "Please enter a proxy address")
+                    return
+                proxies = {
+                    'http': proxy_address,
+                    'https': proxy_address
+                }
+                verify = self.verify_cert.get()
+            
             # Send the request
             response = requests.request(
                 method=method,
                 url=path,
                 headers=headers,
                 data=body,
-                verify=False  # Skip SSL verification for testing
+                verify=verify,
+                proxies=proxies,
+                allow_redirects=False  # Don't follow redirects to see the actual response
             )
             
             # Format response
@@ -1376,6 +1412,20 @@ class HTTPRequestTool:
                             key, value = line.split(':', 1)
                             headers[key.strip()] = value.strip()
                     
+                    # Configure proxy if enabled
+                    proxies = None
+                    verify = True
+                    if self.use_proxy.get():
+                        proxy_address = self.proxy_address.get().strip()
+                        if not proxy_address:
+                            messagebox.showerror("Error", "Please enter a proxy address")
+                            return
+                        proxies = {
+                            'http': proxy_address,
+                            'https': proxy_address
+                        }
+                        verify = self.verify_cert.get()
+                    
                     for i, file_path in enumerate(sensitive_files):
                         # Update progress
                         progress['value'] = i + 1
@@ -1384,7 +1434,14 @@ class HTTPRequestTool:
                         # Try the file path
                         url = f"{base_url}{file_path}"
                         try:
-                            response = requests.get(url, headers=headers, verify=False, timeout=5)
+                            response = requests.get(
+                                url, 
+                                headers=headers, 
+                                verify=verify,
+                                proxies=proxies,
+                                timeout=5,
+                                allow_redirects=False
+                            )
                             if response.status_code == 200:
                                 found_files.append((file_path, url, response))
                                 results_text.insert(tk.END, f"✅ Found: {file_path}\n")
