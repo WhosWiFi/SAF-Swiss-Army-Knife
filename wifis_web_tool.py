@@ -1667,7 +1667,14 @@ class HTTPRequestTool:
             'cdn.yandex.ru',
             'cdn.yandex.com',
             'youtube.com',
-            'w3.org'
+            'w3.org',
+            'whatfix.com',
+            'www.w3',
+            'googleapis.com',
+            'google.com',
+            'www.wfx',
+            'microsoftedge.microsoft.com',
+            'support.whatfix.com'
         ]
 
         def analyze_content():
