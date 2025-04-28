@@ -1557,10 +1557,16 @@ class HTTPRequestTool:
             "API Keys": [
                 r'api[_-]?key["\']?\s*[:=]\s*["\'][A-Za-z0-9_-]{20,}["\']',
                 r'apikey["\']?\s*[:=]\s*["\'][A-Za-z0-9_-]{20,}["\']',
+                r'<meta\s+name=["\']api-key["\']',
+                r'<meta\s+name=["\']api_key["\']',
+                r'<input[^>]+name=["\']api_key["\'][^>]+value=["\'][A-Za-z0-9_-]{20,}["\']',
             ],
             "Access Tokens": [
                 r'access[_-]?token["\']?\s*[:=]\s*["\'][A-Za-z0-9_-]{20,}["\']',
                 r'bearer[_-]?token["\']?\s*[:=]\s*["\'][A-Za-z0-9_-]{20,}["\']',
+                r'<meta\s+name=["\']debug-token["\']',
+                r'<meta\s+name=["\']debug_token["\']',
+                r'debug[_-]?token["\']?\s*[:=]\s*["\'][A-Za-z0-9_-]{20,}["\']',
             ],
             "Secret Keys": [
                 r'secret[_-]?key["\']?\s*[:=]\s*["\'][A-Za-z0-9_-]{20,}["\']',
