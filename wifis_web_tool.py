@@ -13,7 +13,7 @@ from datetime import datetime
 class HTTPRequestTool:
     def __init__(self, root):
         self.root = root
-        self.root.title("HTTP Request Tool with JWT Decoder")
+        self.root.title("WiFi's Web Tool")
         
         # Set minimum window size
         self.root.minsize(1200, 800)
