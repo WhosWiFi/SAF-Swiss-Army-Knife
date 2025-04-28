@@ -661,9 +661,9 @@ class HTTPRequestTool:
             
             def run_hashcat():
                 try:
-                    # Run hashcat with proper formatting
+                    # Run hashcat with proper formatting and wordlist
                     result = subprocess.run(
-                        ['hashcat', '-a', '0', '-m', '16500', 'temp_jwt.txt', secrets_path, '--show'],
+                        ['hashcat', '-a', '0', '-m', '16500', 'temp_jwt.txt', secrets_path],
                         capture_output=True,
                         text=True
                     )
@@ -803,17 +803,38 @@ class HTTPRequestTool:
                         if not secret_key:
                             messagebox.showerror("Error", "Please enter a secret key")
                             return
-                        new_token = jwt.encode(
-                            new_payload,
-                            secret_key,
-                            algorithm="HS256",
-                            headers=new_header
-                        )
+                        
+                        # Get algorithm from the original token's header
+                        try:
+                            original_header = jwt.get_unverified_header(original_token)
+                            algorithm = original_header.get('alg', 'HS256')
+                        except:
+                            algorithm = 'HS256'  # Default if we can't get the original algorithm
+                        
+                        # Check if algorithm uses a secret key
+                        if algorithm in ['HS256', 'HS384', 'HS512']:
+                            new_token = jwt.encode(
+                                new_payload,
+                                secret_key,
+                                algorithm=algorithm,
+                                headers=new_header
+                            )
+                        else:
+                            messagebox.showerror("Error", f"Algorithm {algorithm} does not use a secret key for signing.\nOnly HS256, HS384, and HS512 are supported for secret key signing.")
+                            return
                     else:
+                        # If not using secret key, just use the algorithm from the header
+                        try:
+                            original_header = jwt.get_unverified_header(original_token)
+                            algorithm = original_header.get('alg', 'none')
+                        except:
+                            algorithm = 'none'  # Default if we can't get the original algorithm
+                        
+                        # For non-secret key algorithms, just use the original algorithm
                         new_token = jwt.encode(
                             new_payload,
                             "",  # Empty secret for unsigned token
-                            algorithm="none",
+                            algorithm=algorithm,
                             headers=new_header
                         )
                     
