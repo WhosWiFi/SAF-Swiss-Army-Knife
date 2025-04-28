@@ -8,6 +8,7 @@ import subprocess
 import os
 from urllib.parse import urlparse, parse_qs
 import base64
+from datetime import datetime
 
 class HTTPRequestTool:
     def __init__(self, root):
@@ -107,6 +108,10 @@ class HTTPRequestTool:
         # TestSSL button
         self.testssl_button = ttk.Button(button_frame, text="Run TestSSL", command=self.run_testssl)
         self.testssl_button.pack(side=tk.LEFT, padx=5)
+        
+        # Add Check for Common Files button
+        self.check_files_button = ttk.Button(button_frame, text="Check for Common Files", command=self.check_common_files)
+        self.check_files_button.pack(side=tk.LEFT, padx=5)
 
     def is_jwt(self, token):
         # Split the token into parts
@@ -882,6 +887,557 @@ class HTTPRequestTool:
         except Exception as e:
             messagebox.showerror("Error", f"Failed to parse JWT: {str(e)}")
             return
+
+    def check_common_files(self):
+        # Get current request text
+        request_text = self.request_text.get("1.0", tk.END).strip()
+        
+        try:
+            # Parse the request to get the base URL
+            request_lines = request_text.split('\n')
+            if not request_lines:
+                messagebox.showerror("Error", "No request found")
+                return
+            
+            # Get the first line (method and path)
+            first_line = request_lines[0].split()
+            if len(first_line) < 2:
+                messagebox.showerror("Error", "Invalid request format")
+                return
+            
+            # Get the full URL
+            full_url = first_line[1]
+            if not full_url.startswith('http'):
+                # If host header exists, use it to construct full URL
+                host = None
+                for line in request_lines[1:]:
+                    if line.lower().startswith('host:'):
+                        host = line.split(':', 1)[1].strip()
+                        break
+                
+                if not host:
+                    messagebox.showerror("Error", "Could not determine host")
+                    return
+                
+                # Always use HTTPS
+                full_url = f"https://{host}{full_url}"
+            
+            # Parse URL to get base
+            parsed_url = urlparse(full_url)
+            base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+            
+            # List of common sensitive files to check
+            sensitive_files = [
+                # API Documentation and Swagger paths
+                '/api-docs',
+                '/api-docs.json',
+                '/api-docs.yaml',
+                '/api-docs.yml',
+                '/swagger',
+                '/swagger.json',
+                '/swagger.yaml',
+                '/swagger.yml',
+                '/swagger-ui',
+                '/swagger-ui.html',
+                '/swagger-ui/index.html',
+                '/swagger-resources',
+                '/swagger-resources/configuration/ui',
+                '/swagger-resources/configuration/security',
+                '/v2/api-docs',
+                '/v3/api-docs',
+                '/v1/api-docs',
+                '/v1/swagger.json',
+                '/v2/swagger.json',
+                '/v3/swagger.json',
+                '/api/swagger.json',
+                '/api/v1/swagger.json',
+                '/api/v2/swagger.json',
+                '/api/v3/swagger.json',
+                '/api/swagger.yaml',
+                '/api/v1/swagger.yaml',
+                '/api/v2/swagger.yaml',
+                '/api/v3/swagger.yaml',
+                '/api/swagger.yml',
+                '/api/v1/swagger.yml',
+                '/api/v2/swagger.yml',
+                '/api/v3/swagger.yml',
+                '/api/swagger',
+                '/api/v1/swagger',
+                '/api/v2/swagger',
+                '/api/v3/swagger',
+                '/api/swagger-ui',
+                '/api/v1/swagger-ui',
+                '/api/v2/swagger-ui',
+                '/api/v3/swagger-ui',
+                '/api/swagger-ui.html',
+                '/api/v1/swagger-ui.html',
+                '/api/v2/swagger-ui.html',
+                '/api/v3/swagger-ui.html',
+                '/api/swagger-resources',
+                '/api/v1/swagger-resources',
+                '/api/v2/swagger-resources',
+                '/api/v3/swagger-resources',
+                '/api/swagger-resources/configuration/ui',
+                '/api/v1/swagger-resources/configuration/ui',
+                '/api/v2/swagger-resources/configuration/ui',
+                '/api/v3/swagger-resources/configuration/ui',
+                '/api/swagger-resources/configuration/security',
+                '/api/v1/swagger-resources/configuration/security',
+                '/api/v2/swagger-resources/configuration/security',
+                '/api/v3/swagger-resources/configuration/security',
+                '/docs',
+                '/docs/api',
+                '/docs/api-docs',
+                '/docs/swagger',
+                '/docs/swagger-ui',
+                '/docs/swagger-ui.html',
+                '/documentation',
+                '/documentation/api',
+                '/documentation/api-docs',
+                '/documentation/swagger',
+                '/documentation/swagger-ui',
+                '/documentation/swagger-ui.html',
+                '/apidocs',
+                '/apidocs/api',
+                '/apidocs/api-docs',
+                '/apidocs/swagger',
+                '/apidocs/swagger-ui',
+                '/apidocs/swagger-ui.html',
+                '/api/documentation',
+                '/api/v1/documentation',
+                '/api/v2/documentation',
+                '/api/v3/documentation',
+                '/api/apidocs',
+                '/api/v1/apidocs',
+                '/api/v2/apidocs',
+                '/api/v3/apidocs',
+                '/api/docs',
+                '/api/v1/docs',
+                '/api/v2/docs',
+                '/api/v3/docs',
+                '/api/openapi.json',
+                '/api/v1/openapi.json',
+                '/api/v2/openapi.json',
+                '/api/v3/openapi.json',
+                '/api/openapi.yaml',
+                '/api/v1/openapi.yaml',
+                '/api/v2/openapi.yaml',
+                '/api/v3/openapi.yaml',
+                '/api/openapi.yml',
+                '/api/v1/openapi.yml',
+                '/api/v2/openapi.yml',
+                '/api/v3/openapi.yml',
+                '/openapi.json',
+                '/openapi.yaml',
+                '/openapi.yml',
+                '/api-specs',
+                '/api-specs/swagger.json',
+                '/api-specs/swagger.yaml',
+                '/api-specs/swagger.yml',
+                '/api-specs/openapi.json',
+                '/api-specs/openapi.yaml',
+                '/api-specs/openapi.yml',
+                '/api/spec',
+                '/api/v1/spec',
+                '/api/v2/spec',
+                '/api/v3/spec',
+                '/api/spec.json',
+                '/api/v1/spec.json',
+                '/api/v2/spec.json',
+                '/api/v3/spec.json',
+                '/api/spec.yaml',
+                '/api/v1/spec.yaml',
+                '/api/v2/spec.yaml',
+                '/api/v3/spec.yaml',
+                '/api/spec.yml',
+                '/api/v1/spec.yml',
+                '/api/v2/spec.yml',
+                '/api/v3/spec.yml',
+                '/spec',
+                '/spec.json',
+                '/spec.yaml',
+                '/spec.yml',
+                '/api/definition',
+                '/api/v1/definition',
+                '/api/v2/definition',
+                '/api/v3/definition',
+                '/api/definition.json',
+                '/api/v1/definition.json',
+                '/api/v2/definition.json',
+                '/api/v3/definition.json',
+                '/api/definition.yaml',
+                '/api/v1/definition.yaml',
+                '/api/v2/definition.yaml',
+                '/api/v3/definition.yaml',
+                '/api/definition.yml',
+                '/api/v1/definition.yml',
+                '/api/v2/definition.yml',
+                '/api/v3/definition.yml',
+                '/definition',
+                '/definition.json',
+                '/definition.yaml',
+                '/definition.yml',
+                
+                # JWT-related paths
+                '/.well-known/jwks.json',
+                '/.well-known/oauth-authorization-server',
+                '/.well-known/openid-configuration',
+                '/.well-known/jwks',
+                '/.well-known/oauth2-configuration',
+                '/.well-known/oauth2-authorization-server',
+                '/.well-known/oauth2-metadata',
+                '/.well-known/oauth2-provider',
+                '/.well-known/oauth2',
+                '/.well-known/openid',
+                '/jwks.json',
+                '/oauth2/jwks',
+                '/oauth2/keys',
+                '/oauth2/certs',
+                '/oauth2/.well-known/jwks.json',
+                '/oauth2/.well-known/openid-configuration',
+                '/openid/jwks',
+                '/openid/keys',
+                '/openid/certs',
+                '/openid/.well-known/jwks.json',
+                '/openid/.well-known/openid-configuration',
+                '/auth/jwks',
+                '/auth/keys',
+                '/auth/certs',
+                '/auth/.well-known/jwks.json',
+                '/auth/.well-known/openid-configuration',
+                '/api/jwks',
+                '/api/keys',
+                '/api/certs',
+                '/api/.well-known/jwks.json',
+                '/api/.well-known/openid-configuration',
+                '/identity/jwks',
+                '/identity/keys',
+                '/identity/certs',
+                '/identity/.well-known/jwks.json',
+                '/identity/.well-known/openid-configuration',
+                '/sso/jwks',
+                '/sso/keys',
+                '/sso/certs',
+                '/sso/.well-known/jwks.json',
+                '/sso/.well-known/openid-configuration',
+                '/login/jwks',
+                '/login/keys',
+                '/login/certs',
+                '/login/.well-known/jwks.json',
+                '/login/.well-known/openid-configuration',
+                '/token/jwks',
+                '/token/keys',
+                '/token/certs',
+                '/token/.well-known/jwks.json',
+                '/token/.well-known/openid-configuration',
+                '/keys',
+                '/certs',
+                '/certificates',
+                '/public-keys',
+                '/public-keys.json',
+                '/public-keys.pem',
+                '/public-keys.txt',
+                '/public-keys.xml',
+                '/public-keys.jwks',
+                '/public-keys.jwk',
+                '/public-keys.jwt',
+                '/public-keys.jws',
+                '/public-keys.jwe',
+                '/public-keys.jwa',
+                '/public-keys.jwk.json',
+                '/public-keys.jwt.json',
+                '/public-keys.jws.json',
+                '/public-keys.jwe.json',
+                '/public-keys.jwa.json',
+                '/public-keys.jwk.pem',
+                '/public-keys.jwt.pem',
+                '/public-keys.jws.pem',
+                '/public-keys.jwe.pem',
+                '/public-keys.jwa.pem',
+                '/public-keys.jwk.txt',
+                '/public-keys.jwt.txt',
+                '/public-keys.jws.txt',
+                '/public-keys.jwe.txt',
+                '/public-keys.jwa.txt',
+                '/public-keys.jwk.xml',
+                '/public-keys.jwt.xml',
+                '/public-keys.jws.xml',
+                '/public-keys.jwe.xml',
+                '/public-keys.jwa.xml',
+                '/public-keys.jwk.jwks',
+                '/public-keys.jwt.jwks',
+                '/public-keys.jws.jwks',
+                '/public-keys.jwe.jwks',
+                '/public-keys.jwa.jwks',
+                '/public-keys.jwk.jwk',
+                '/public-keys.jwt.jwk',
+                '/public-keys.jws.jwk',
+                '/public-keys.jwe.jwk',
+                '/public-keys.jwa.jwk',
+                '/public-keys.jwk.jwt',
+                '/public-keys.jwt.jwt',
+                '/public-keys.jws.jwt',
+                '/public-keys.jwe.jwt',
+                '/public-keys.jwa.jwt',
+                '/public-keys.jwk.jws',
+                '/public-keys.jwt.jws',
+                '/public-keys.jws.jws',
+                '/public-keys.jwe.jws',
+                '/public-keys.jwa.jws',
+                '/public-keys.jwk.jwe',
+                '/public-keys.jwt.jwe',
+                '/public-keys.jws.jwe',
+                '/public-keys.jwe.jwe',
+                '/public-keys.jwa.jwe',
+                '/public-keys.jwk.jwa',
+                '/public-keys.jwt.jwa',
+                '/public-keys.jws.jwa',
+                '/public-keys.jwe.jwa',
+                '/public-keys.jwa.jwa',
+                
+                # Configuration files
+                '/web.config',
+                '/web.conf',
+                '/config.php',
+                '/config.json',
+                '/.env',
+                '/.env.production',
+                '/.env.development',
+                '/.env.local',
+                '/.htaccess',
+                '/.htpasswd',
+                
+                # System files
+                '/etc/passwd',
+                '/etc/shadow',
+                '/etc/hosts',
+                '/etc/hostname',
+                '/etc/group',
+                '/etc/shadow-',
+                '/etc/passwd-',
+                
+                # Backup files
+                '/backup.zip',
+                '/backup.tar',
+                '/backup.tar.gz',
+                '/backup.sql',
+                '/database.sql',
+                '/dump.sql',
+                
+                # Version control
+                '/.git/config',
+                '/.git/HEAD',
+                '/.git/index',
+                '/.git/logs/HEAD',
+                '/.svn/entries',
+                '/.hg/store/00manifest.i',
+                
+                # Documentation
+                '/README.md',
+                '/README.txt',
+                '/CHANGELOG.md',
+                '/LICENSE',
+                
+                # API and metadata
+                '/.well-known/security.txt',
+                '/crossdomain.xml',
+                '/clientaccesspolicy.xml',
+                '/robots.txt',
+                '/sitemap.xml',
+                
+                # Log files
+                '/logs/error.log',
+                '/logs/access.log',
+                '/var/log/apache2/access.log',
+                '/var/log/apache2/error.log',
+                '/var/log/nginx/access.log',
+                '/var/log/nginx/error.log',
+                
+                # Database files
+                '/db.sqlite3',
+                '/database.sqlite',
+                '/app.db',
+                
+                # Temporary files
+                '/temp.txt',
+                '/tmp.txt',
+                '/test.txt',
+                
+                # Common backup patterns
+                '/backup/',
+                '/backups/',
+                '/old/',
+                '/archive/',
+                
+                # Common admin interfaces
+                '/admin/',
+                '/administrator/',
+                '/manager/',
+                '/phpmyadmin/',
+                '/adminer.php',
+                
+                # Common debug files
+                '/debug.log',
+                '/error.log',
+                '/phpinfo.php',
+                '/info.php',
+                
+                # Common sensitive directories
+                '/private/',
+                '/secret/',
+                '/confidential/',
+                '/secure/',
+                
+                # Common API documentation
+                '/api-docs/',
+                '/swagger/',
+                '/swagger-ui/',
+                '/api/v1/docs/',
+                
+                # Common development files
+                '/package.json',
+                '/composer.json',
+                '/requirements.txt',
+                '/pom.xml',
+                
+                # Common security files
+                '/security.txt',
+                '/.well-known/security.txt',
+                '/security.html',
+                
+                # Common cache files
+                '/cache/',
+                '/tmp/',
+                '/temp/',
+                
+                # Common upload directories
+                '/uploads/',
+                '/files/',
+                '/images/',
+                '/media/',
+                
+                # Common backup patterns with dates
+                '/backup_2023.zip',
+                '/backup_2023.tar.gz',
+                '/backup_2023.sql',
+                
+                # Common configuration backups
+                '/config.bak',
+                '/config.old',
+                '/config.backup',
+                
+                # Common database backups
+                '/database.bak',
+                '/database.old',
+                '/database.backup',
+                
+                # Common log backups
+                '/logs.bak',
+                '/logs.old',
+                '/logs.backup'
+            ]
+            
+            # Create results window
+            results_window = tk.Toplevel(self.root)
+            results_window.title("Common Files Check Results")
+            results_window.geometry("800x600")
+            
+            # Create text area for results
+            results_frame = ttk.Frame(results_window)
+            results_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+            
+            # Add label
+            ttk.Label(results_frame, text="Checking for common sensitive files...").pack(pady=5)
+            
+            # Create text area for results
+            results_text = tk.Text(results_frame, wrap=tk.WORD)
+            results_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+            
+            # Add scrollbar
+            scrollbar = ttk.Scrollbar(results_text)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            results_text.config(yscrollcommand=scrollbar.set)
+            scrollbar.config(command=results_text.yview)
+            
+            # Add progress bar
+            progress_frame = ttk.Frame(results_window)
+            progress_frame.pack(fill=tk.X, padx=5, pady=5)
+            
+            progress = ttk.Progressbar(progress_frame, mode='determinate', maximum=len(sensitive_files))
+            progress.pack(fill=tk.X, expand=True, padx=5)
+            
+            def check_files():
+                found_files = []
+                try:
+                    # Get headers from original request
+                    headers = {}
+                    for line in request_lines[1:]:
+                        if ':' in line:
+                            key, value = line.split(':', 1)
+                            headers[key.strip()] = value.strip()
+                    
+                    for i, file_path in enumerate(sensitive_files):
+                        # Update progress
+                        progress['value'] = i + 1
+                        results_window.update()
+                        
+                        # Try the file path
+                        url = f"{base_url}{file_path}"
+                        try:
+                            response = requests.get(url, headers=headers, verify=False, timeout=5)
+                            if response.status_code == 200:
+                                found_files.append((file_path, url, response))
+                                results_text.insert(tk.END, f"✅ Found: {file_path}\n")
+                            else:
+                                results_text.insert(tk.END, f"❌ Not found: {file_path}\n")
+                        except:
+                            results_text.insert(tk.END, f"❌ Error checking: {file_path}\n")
+                        
+                        results_text.see(tk.END)
+                    
+                    # Show summary
+                    results_text.insert(tk.END, "\n=== Summary ===\n")
+                    results_text.insert(tk.END, f"Total files checked: {len(sensitive_files)}\n")
+                    results_text.insert(tk.END, f"Files found: {len(found_files)}\n\n")
+                    
+                    if found_files:
+                        results_text.insert(tk.END, "Found files:\n")
+                        for file_path, url, response in found_files:
+                            results_text.insert(tk.END, f"- {file_path}\n")
+                            results_text.insert(tk.END, f"  URL: {url}\n")
+                            results_text.insert(tk.END, f"  Response length: {len(response.text)} bytes\n\n")
+                    
+                    # Save found files to a report
+                    if found_files:
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        report_file = f"common_files_report_{timestamp}.txt"
+                        with open(report_file, 'w') as f:
+                            f.write("=== Common Files Check Report ===\n\n")
+                            f.write(f"Base URL: {base_url}\n")
+                            f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+                            f.write("Found files:\n")
+                            for file_path, url, response in found_files:
+                                f.write(f"\nFile: {file_path}\n")
+                                f.write(f"URL: {url}\n")
+                                f.write(f"Response length: {len(response.text)} bytes\n")
+                                f.write("Response headers:\n")
+                                for key, value in response.headers.items():
+                                    f.write(f"  {key}: {value}\n")
+                                f.write("\nResponse content (first 1000 chars):\n")
+                                f.write(response.text[:1000])
+                                f.write("\n" + "="*50 + "\n")
+                        
+                        messagebox.showinfo("Report Saved", f"Report saved to {report_file}")
+                
+                except Exception as e:
+                    results_text.insert(tk.END, f"\nError: {str(e)}\n")
+            
+            # Run the check in a separate thread
+            import threading
+            threading.Thread(target=check_files, daemon=True).start()
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to check common files: {str(e)}")
 
 def main():
     root = tk.Tk()
