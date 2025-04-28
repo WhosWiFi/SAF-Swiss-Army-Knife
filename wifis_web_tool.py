@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
+from tkinter import ttk, messagebox, simpledialog, filedialog
 import jwt
 import json
 import requests
@@ -112,6 +112,10 @@ class HTTPRequestTool:
         # Add Check for Common Files button
         self.check_files_button = ttk.Button(button_frame, text="Check for Common Files", command=self.check_common_files)
         self.check_files_button.pack(side=tk.LEFT, padx=5)
+        
+        # Add Analyze Static File button
+        self.analyze_static_button = ttk.Button(button_frame, text="Analyze Static File", command=self.analyze_static_file)
+        self.analyze_static_button.pack(side=tk.LEFT, padx=5)
         
         # Add proxy configuration frame
         proxy_frame = ttk.Frame(self.request_frame)
@@ -1495,6 +1499,204 @@ class HTTPRequestTool:
             
         except Exception as e:
             messagebox.showerror("Error", f"Failed to check common files: {str(e)}")
+
+    def analyze_static_file(self):
+        # Create a new window for file analysis
+        analysis_window = tk.Toplevel(self.root)
+        analysis_window.title("Static File Analysis")
+        analysis_window.geometry("1000x800")
+        
+        # Create main frame
+        main_frame = ttk.Frame(analysis_window)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Create input frame
+        input_frame = ttk.LabelFrame(main_frame, text="Paste File Content")
+        input_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        
+        # Create text area for input
+        input_text = tk.Text(input_frame, wrap=tk.WORD, height=15)
+        input_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Add scrollbar
+        input_scrollbar = ttk.Scrollbar(input_text)
+        input_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        input_text.config(yscrollcommand=input_scrollbar.set)
+        input_scrollbar.config(command=input_text.yview)
+        
+        # Create results frame
+        results_frame = ttk.LabelFrame(main_frame, text="Analysis Results")
+        results_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        
+        # Create text area for results
+        results_text = tk.Text(results_frame, wrap=tk.WORD)
+        results_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Add scrollbar
+        scrollbar = ttk.Scrollbar(results_text)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        results_text.config(yscrollcommand=scrollbar.set)
+        scrollbar.config(command=results_text.yview)
+        
+        # Create file content frame
+        content_frame = ttk.LabelFrame(main_frame, text="Content with Highlights")
+        content_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        
+        # Create text area for file content
+        content_text = tk.Text(content_frame, wrap=tk.WORD)
+        content_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Add scrollbar
+        content_scrollbar = ttk.Scrollbar(content_text)
+        content_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        content_text.config(yscrollcommand=content_scrollbar.set)
+        content_scrollbar.config(command=content_text.yview)
+        
+        # Define patterns to look for
+        sensitive_patterns = {
+            "API Keys": [
+                r'api[_-]?key["\']?\s*[:=]\s*["\'][A-Za-z0-9_-]{20,}["\']',
+                r'apikey["\']?\s*[:=]\s*["\'][A-Za-z0-9_-]{20,}["\']',
+            ],
+            "Access Tokens": [
+                r'access[_-]?token["\']?\s*[:=]\s*["\'][A-Za-z0-9_-]{20,}["\']',
+                r'bearer[_-]?token["\']?\s*[:=]\s*["\'][A-Za-z0-9_-]{20,}["\']',
+            ],
+            "Secret Keys": [
+                r'secret[_-]?key["\']?\s*[:=]\s*["\'][A-Za-z0-9_-]{20,}["\']',
+                r'private[_-]?key["\']?\s*[:=]\s*["\'][A-Za-z0-9_-]{20,}["\']',
+            ],
+            "Usernames and Passwords": [
+                r'username["\']?\s*[:=]\s*["\'][^"\']{3,}["\']',
+                r'user["\']?\s*[:=]\s*["\'][^"\']{3,}["\']',
+                r'login["\']?\s*[:=]\s*["\'][^"\']{3,}["\']',
+                r'password["\']?\s*[:=]\s*["\'][^"\']{8,}["\']',
+                r'pass["\']?\s*[:=]\s*["\'][^"\']{8,}["\']',
+                r'pwd["\']?\s*[:=]\s*["\'][^"\']{8,}["\']',
+                r'credentials["\']?\s*[:=]\s*["\'][^"\']{8,}["\']',
+                r'auth["\']?\s*[:=]\s*["\'][^"\']{8,}["\']',
+                r'authentication["\']?\s*[:=]\s*["\'][^"\']{8,}["\']',
+            ],
+            "Database Credentials": [
+                r'db[_-]?password["\']?\s*[:=]\s*["\'][^"\']{8,}["\']',
+                r'database[_-]?password["\']?\s*[:=]\s*["\'][^"\']{8,}["\']',
+                r'postgres[_-]?password["\']?\s*[:=]\s*["\'][^"\']{8,}["\']',
+                r'pg[_-]?password["\']?\s*[:=]\s*["\'][^"\']{8,}["\']',
+                r'mysql[_-]?password["\']?\s*[:=]\s*["\'][^"\']{8,}["\']',
+                r'mongodb[_-]?password["\']?\s*[:=]\s*["\'][^"\']{8,}["\']',
+                r'mssql[_-]?password["\']?\s*[:=]\s*["\'][^"\']{8,}["\']',
+                r'sql[_-]?password["\']?\s*[:=]\s*["\'][^"\']{8,}["\']',
+                r'oracle[_-]?password["\']?\s*[:=]\s*["\'][^"\']{8,}["\']',
+                r'redis[_-]?password["\']?\s*[:=]\s*["\'][^"\']{8,}["\']',
+                r'connection[_-]?string["\']?\s*[:=]\s*["\'][^"\']{8,}["\']',
+                r'connection[_-]?uri["\']?\s*[:=]\s*["\'][^"\']{8,}["\']',
+                r'db[_-]?uri["\']?\s*[:=]\s*["\'][^"\']{8,}["\']',
+                r'database[_-]?uri["\']?\s*[:=]\s*["\'][^"\']{8,}["\']',
+            ],
+            "JWT Tokens": [
+                r'eyJ[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*',
+            ],
+            "AWS Credentials": [
+                r'aws[_-]?access[_-]?key[_-]?id["\']?\s*[:=]\s*["\'][A-Z0-9]{20}["\']',
+                r'aws[_-]?secret[_-]?access[_-]?key["\']?\s*[:=]\s*["\'][A-Za-z0-9/+=]{40}["\']',
+            ],
+            "Email Addresses": [
+                r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',
+                r'mailto:[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',
+            ],
+            "Phone Numbers": [
+                r'\b(?:\+?(\d{1,3}))?[-. (]*(\d{3})[-. )]*(\d{3})[-. ]*(\d{4})\b',  # US/Canada format
+                r'\b(?:\+?(\d{1,3}))?[-. (]*(\d{2})[-. )]*(\d{4})[-. ]*(\d{4})\b',  # International format
+                r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b',  # Simple format
+            ],
+            "Credit Card Numbers": [
+                r'\b(?:4[0-9]{12}(?:[0-9]{3})?)\b',  # Visa
+                r'\b(?:5[1-5][0-9]{14})\b',  # MasterCard
+                r'\b(?:3[47][0-9]{13})\b',  # American Express
+                r'\b(?:3(?:0[0-5]|[68][0-9])[0-9]{11})\b',  # Diners Club
+                r'\b(?:6(?:011|5[0-9]{2})[0-9]{12})\b',  # Discover
+                r'\b(?:35[2-8][0-9]{13})\b',  # JCB
+            ],
+            "Internal IP Addresses": [
+                r'\b(10\.\d{1,3}\.\d{1,3}\.\d{1,3})\b',  # 10.0.0.0/8
+                r'\b(172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})\b',  # 172.16.0.0/12
+                r'\b(192\.168\.\d{1,3}\.\d{1,3})\b',  # 192.168.0.0/16
+                r'\b(127\.\d{1,3}\.\d{1,3}\.\d{1,3})\b',  # 127.0.0.0/8
+                r'\b(169\.254\.\d{1,3}\.\d{1,3})\b',  # 169.254.0.0/16
+            ],
+            "Hardcoded URLs": [
+                r'https?://[^\s<>"]+',
+            ]
+        }
+        
+        def analyze_content():
+            content = input_text.get("1.0", tk.END).strip()
+            if not content:
+                messagebox.showerror("Error", "Please paste some content to analyze")
+                return
+            
+            try:
+                # Display content
+                content_text.delete("1.0", tk.END)
+                content_text.insert("1.0", content)
+                
+                # Clear previous results
+                results_text.delete("1.0", tk.END)
+                
+                # Analyze content
+                findings = []
+                for category, patterns in sensitive_patterns.items():
+                    for pattern in patterns:
+                        matches = re.finditer(pattern, content, re.IGNORECASE)
+                        for match in matches:
+                            start, end = match.span()
+                            line_number = content[:start].count('\n') + 1
+                            line_start = content.rfind('\n', 0, start) + 1
+                            line_end = content.find('\n', end)
+                            if line_end == -1:
+                                line_end = len(content)
+                            line = content[line_start:line_end].strip()
+                            
+                            findings.append({
+                                'category': category,
+                                'line': line_number,
+                                'match': match.group(),
+                                'context': line
+                            })
+                
+                # Display findings
+                if findings:
+                    results_text.insert(tk.END, f"Found {len(findings)} potential security issues:\n\n")
+                    
+                    # Group findings by category
+                    findings_by_category = {}
+                    for finding in findings:
+                        if finding['category'] not in findings_by_category:
+                            findings_by_category[finding['category']] = []
+                        findings_by_category[finding['category']].append(finding)
+                    
+                    # Display findings by category
+                    for category, category_findings in findings_by_category.items():
+                        results_text.insert(tk.END, f"\n{category}:\n")
+                        for finding in category_findings:
+                            results_text.insert(tk.END, f"  Line {finding['line']}: {finding['match']}\n")
+                            results_text.insert(tk.END, f"  Context: {finding['context']}\n\n")
+                    
+                    # Highlight findings in content
+                    content_text.tag_configure('highlight', background='yellow')
+                    for finding in findings:
+                        line_start = f"{finding['line']}.0"
+                        line_end = f"{finding['line']}.end"
+                        content_text.tag_add('highlight', line_start, line_end)
+                else:
+                    results_text.insert(tk.END, "No sensitive information found in the content.")
+                
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to analyze content: {str(e)}")
+        
+        # Add analyze button
+        analyze_button = ttk.Button(main_frame, text="Analyze Content", command=analyze_content)
+        analyze_button.pack(pady=10)
 
 def main():
     root = tk.Tk()
