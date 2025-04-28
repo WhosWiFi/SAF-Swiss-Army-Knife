@@ -228,7 +228,7 @@ class HTTPRequestTool:
         # This regex looks for base64 strings separated by dots, allowing for more flexible patterns
         jwt_pattern = r'(?:Bearer\s+)?([A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+(?:\.[A-Za-z0-9-_=]+)?)'
         
-        # Look for JWTs in headers
+        # Look for JWTs in headers and cookies
         for line in request_text.split('\n'):
             # Check for Authorization header
             if 'Authorization:' in line:
@@ -238,14 +238,18 @@ class HTTPRequestTool:
                         tokens.append(token)
                         seen_tokens.add(token)
             
-            # Check for Cookie header
+            # Check for Cookie header with more flexible pattern matching
             if 'Cookie:' in line:
-                # Look for session cookies that might contain JWTs
-                cookie_matches = re.findall(r'session=([^;,\s]+)', line)
-                for token in cookie_matches:
-                    if token not in seen_tokens and self.is_jwt(token):
-                        tokens.append(token)
-                        seen_tokens.add(token)
+                # Look for any cookie that might contain a JWT
+                cookie_pairs = line.split(':', 1)[1].strip().split(';')
+                for pair in cookie_pairs:
+                    cookie_name, cookie_value = pair.strip().split('=', 1) if '=' in pair else (None, pair.strip())
+                    if cookie_value:
+                        matches = re.findall(jwt_pattern, cookie_value)
+                        for token in matches:
+                            if token not in seen_tokens and self.is_jwt(token):
+                                tokens.append(token)
+                                seen_tokens.add(token)
             
             # Check for other potential JWT-containing headers
             if ':' in line:
@@ -257,6 +261,7 @@ class HTTPRequestTool:
                         seen_tokens.add(token)
         
         # Also check the entire text for any JWTs we might have missed
+        # This includes looking for JWTs in query parameters and other parts of the request
         all_matches = re.findall(jwt_pattern, request_text)
         for token in all_matches:
             if token not in seen_tokens and self.is_jwt(token):
