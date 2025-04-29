@@ -12,6 +12,7 @@ from datetime import datetime
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
+import time
 
 class HTTPRequestTool:
     def __init__(self, root):
@@ -2487,7 +2488,7 @@ Attack Details:
                     
                     # Configure session with retries and longer timeout
                     session = requests.Session()
-                    retry = requests.adapters.HTTPAdapter(max_retries=3)
+                    retry = requests.adapters.HTTPAdapter(max_retries=3, backoff_factor=1)
                     session.mount('https://', retry)
                     session.mount('http://', retry)
                     
@@ -2495,6 +2496,7 @@ Attack Details:
                     page = 0
                     page_size = 50  # Default page size
                     all_results = []
+                    max_results = 150000  # Maximum results limit
                     
                     # First get total number of pages
                     num_pages_url = f"https://web.archive.org/cdx/search/cdx?url={domain}&matchType=domain&output=json&showNumPages=true"
@@ -2503,45 +2505,73 @@ Attack Details:
                         if num_pages_response.status_code == 200:
                             total_pages = int(num_pages_response.text.strip())
                             results_text.insert(tk.END, f"Found {total_pages} pages of results...\n")
+                            
+                            # Calculate estimated total results
+                            estimated_results = total_pages * page_size * 3000  # 3000 lines per block
+                            if estimated_results > max_results:
+                                results_text.insert(tk.END, f"Note: Results are limited to {max_results} entries due to API restrictions.\n")
                         else:
                             total_pages = 1  # Fallback if we can't get total pages
                     except:
                         total_pages = 1  # Fallback if we can't get total pages
                     
-                    while page < total_pages:
+                    while page < total_pages and len(all_results) < max_results:
                         # Construct the Wayback Machine CDX API URL with proper format and pagination
                         wayback_url = f"https://web.archive.org/cdx/search/cdx?url={domain}&matchType=domain&output=json&fl=timestamp,original,mimetype,statuscode,digest,length&collapse=urlkey&page={page}&pageSize={page_size}"
                         
-                        # Send request to Wayback Machine API with longer timeout
-                        response = session.get(wayback_url, timeout=60)
-                        
-                        if response.status_code != 200:
-                            results_text.insert(tk.END, f"Error: Failed to fetch data from Wayback Machine (Status code: {response.status_code})")
-                            break
-                        
-                        # Parse the JSON response
-                        data = response.json()
-                        if not data or len(data) <= 1:  # First row is headers
-                            break
-                        
-                        # Process results
-                        for row in data[1:]:
-                            try:
-                                timestamp, original, mimetype, statuscode, digest, length = row
-                                if not all([timestamp, original, mimetype, statuscode, digest, length]):
-                                    continue
-                                
-                                # Add result to collection
-                                all_results.append(row)
-                            except:
+                        try:
+                            # Send request to Wayback Machine API with longer timeout
+                            response = session.get(wayback_url, timeout=60)
+                            
+                            if response.status_code == 429:  # Too Many Requests
+                                results_text.insert(tk.END, "Rate limit reached. Waiting before retrying...\n")
+                                time.sleep(5)  # Wait 5 seconds before retrying
                                 continue
-                        
-                        # Update progress
-                        results_text.insert(tk.END, f"Processed page {page + 1}/{total_pages}. Found {len(all_results)} URLs so far...\n")
-                        results_text.see(tk.END)
-                        
-                        # Move to next page
-                        page += 1
+                            
+                            if response.status_code != 200:
+                                results_text.insert(tk.END, f"Error: Failed to fetch data from Wayback Machine (Status code: {response.status_code})")
+                                break
+                            
+                            # Parse the JSON response
+                            data = response.json()
+                            if not data or len(data) <= 1:  # First row is headers
+                                break
+                            
+                            # Process results
+                            for row in data[1:]:
+                                try:
+                                    timestamp, original, mimetype, statuscode, digest, length = row
+                                    if not all([timestamp, original, mimetype, statuscode, digest, length]):
+                                        continue
+                                    
+                                    # Add result to collection
+                                    all_results.append(row)
+                                    
+                                    # Check if we've reached the maximum results
+                                    if len(all_results) >= max_results:
+                                        results_text.insert(tk.END, f"Reached maximum results limit of {max_results}.\n")
+                                        break
+                                    
+                                except:
+                                    continue
+                            
+                            # Update progress
+                            results_text.insert(tk.END, f"Processed page {page + 1}/{total_pages}. Found {len(all_results)} URLs so far...\n")
+                            results_text.see(tk.END)
+                            
+                            # Move to next page
+                            page += 1
+                            
+                            # Add a small delay between requests to avoid rate limiting
+                            time.sleep(1)
+                            
+                        except requests.Timeout:
+                            results_text.insert(tk.END, "Request timed out. Retrying...\n")
+                            time.sleep(5)  # Wait 5 seconds before retrying
+                            continue
+                        except requests.RequestException as e:
+                            results_text.insert(tk.END, f"Error: {str(e)}\n")
+                            break
                     
                     # Display results
                     if not all_results:
