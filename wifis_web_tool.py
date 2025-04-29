@@ -127,14 +127,13 @@ class HTTPRequestTool:
         
         # Add proxy checkbox
         self.use_proxy = tk.BooleanVar(value=False)
-        self.proxy_check = ttk.Checkbutton(proxy_frame, text="Use Burp Proxy", variable=self.use_proxy)
+        self.proxy_check = ttk.Checkbutton(proxy_frame, text="Use Proxy", variable=self.use_proxy)
         self.proxy_check.pack(side=tk.LEFT, padx=5)
         
         # Add proxy address entry
-        ttk.Label(proxy_frame, text="Proxy Address:").pack(side=tk.LEFT, padx=5)
         self.proxy_address = ttk.Entry(proxy_frame, width=30)
-        self.proxy_address.insert(0, "http://127.0.0.1:8080")  # Default Burp proxy address
         self.proxy_address.pack(side=tk.LEFT, padx=5)
+        self.proxy_address.insert(0, "http://localhost:8080")
         
         # Add proxy CA cert checkbox
         self.verify_cert = tk.BooleanVar(value=False)
@@ -145,9 +144,24 @@ class HTTPRequestTool:
         self.wayback_button = ttk.Button(button_frame, text="Wayback Machine", command=self.search_wayback_machine)
         self.wayback_button.pack(side=tk.LEFT, padx=5)
 
-        # Add Headers Analysis button
-        self.headers_button = ttk.Button(button_frame, text="Analyze Headers", command=self.analyze_headers)
-        self.headers_button.pack(side=tk.LEFT, padx=5)
+        # Add proxy settings
+        proxy_frame = ttk.Frame(button_frame)
+        proxy_frame.pack(side=tk.LEFT, padx=5)
+        
+        # Add proxy checkbox
+        self.use_proxy = tk.BooleanVar(value=False)
+        self.proxy_check = ttk.Checkbutton(proxy_frame, text="Use Proxy", variable=self.use_proxy)
+        self.proxy_check.pack(side=tk.LEFT, padx=5)
+        
+        # Add proxy address entry
+        self.proxy_address = ttk.Entry(proxy_frame, width=30)
+        self.proxy_address.pack(side=tk.LEFT, padx=5)
+        self.proxy_address.insert(0, "http://localhost:8080")
+        
+        # Add proxy CA cert checkbox
+        self.verify_cert = tk.BooleanVar(value=False)
+        self.cert_check = ttk.Checkbutton(proxy_frame, text="Verify Proxy Cert", variable=self.verify_cert)
+        self.cert_check.pack(side=tk.LEFT, padx=5)
 
     def is_jwt(self, token):
         # Split the token into parts
@@ -2642,411 +2656,6 @@ Attack Details:
         # Add search button
         search_button = ttk.Button(input_frame, text="Search", command=search)
         search_button.pack(side=tk.LEFT, padx=5)
-
-    def analyze_headers(self):
-        # Create a new window for headers analysis
-        headers_window = tk.Toplevel(self.root)
-        headers_window.title("HTTP Headers Analysis")
-        headers_window.geometry("1200x800")
-        
-        # Create main frame
-        main_frame = ttk.Frame(headers_window)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        # Create split frames for results and summary
-        results_frame = ttk.LabelFrame(main_frame, text="Headers Analysis Results")
-        results_frame.pack(fill=tk.BOTH, expand=True, pady=5)
-        
-        # Create treeview for results with reduced height
-        tree = ttk.Treeview(results_frame, columns=("Value", "Status", "Recommendation"), show="tree headings", height=15)
-        tree.heading("#0", text="Header")
-        tree.heading("Value", text="Value")
-        tree.heading("Status", text="Status")
-        tree.heading("Recommendation", text="Recommendation")
-        
-        # Set column widths
-        tree.column("#0", width=200)
-        tree.column("Value", width=300)
-        tree.column("Status", width=100)
-        tree.column("Recommendation", width=600)
-        
-        # Add scrollbars
-        vsb = ttk.Scrollbar(results_frame, orient="vertical", command=tree.yview)
-        hsb = ttk.Scrollbar(results_frame, orient="horizontal", command=tree.xview)
-        tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
-        
-        # Pack tree and scrollbars
-        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        vsb.pack(side=tk.RIGHT, fill=tk.Y)
-        hsb.pack(side=tk.BOTTOM, fill=tk.X)
-        
-        # Create summary frame with larger size
-        summary_frame = ttk.LabelFrame(main_frame, text="Security Summary")
-        summary_frame.pack(fill=tk.BOTH, expand=True, pady=5, padx=5)
-        
-        # Create summary text with larger height and font
-        summary_text = tk.Text(summary_frame, height=20, wrap=tk.WORD, font=("Arial", 10))
-        summary_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        
-        # Add tags for different types of text
-        summary_text.tag_configure("header", font=("Arial", 12, "bold"))
-        summary_text.tag_configure("success", foreground="green")
-        summary_text.tag_configure("warning", foreground="orange")
-        summary_text.tag_configure("error", foreground="red")
-        
-        def analyze():
-            # Get the current request text
-            request_text = self.request_text.get("1.0", tk.END).strip()
-            if not request_text:
-                messagebox.showerror("Error", "Please enter a request to analyze")
-                return
-            
-            # Disable analyze button and show progress
-            analyze_button.config(state='disabled')
-            progress_frame = ttk.Frame(main_frame)
-            progress_frame.pack(fill=tk.X, pady=5)
-            progress_label = ttk.Label(progress_frame, text="Analyzing headers...")
-            progress_label.pack(side=tk.LEFT, padx=5)
-            progress = ttk.Progressbar(progress_frame, mode='indeterminate')
-            progress.pack(fill=tk.X, expand=True, padx=5)
-            progress.start()
-            
-            def perform_analysis():
-                try:
-                    # Clear previous results
-                    for item in tree.get_children():
-                        tree.delete(item)
-                    summary_text.delete("1.0", tk.END)
-                    
-                    # Parse the request
-                    request_lines = request_text.split('\n')
-                    if not request_lines:
-                        raise ValueError("Empty request")
-                    
-                    # Parse first line (method, path, version)
-                    method, path, *_ = request_lines[0].split()
-                    
-                    # Parse headers
-                    headers = {}
-                    current_line = 1
-                    while current_line < len(request_lines) and request_lines[current_line].strip():
-                        header_line = request_lines[current_line].strip()
-                        key, value = header_line.split(':', 1)
-                        headers[key.strip()] = value.strip()
-                        current_line += 1
-                    
-                    # Get body if exists (after blank line)
-                    body = None
-                    if current_line < len(request_lines):
-                        body = '\n'.join(request_lines[current_line + 1:]).strip()
-                    
-                    # Parse URL and enforce HTTPS
-                    if not path.startswith('http'):
-                        host = headers.get('Host', '')
-                        if host:
-                            path = f"https://{host}{path}"
-                        else:
-                            raise ValueError("No host specified in headers and path is not absolute URL")
-                    else:
-                        if path.startswith('http://'):
-                            path = path.replace('http://', 'https://', 1)
-                    
-                    # Configure proxy if enabled
-                    proxies = None
-                    verify = True
-                    if self.use_proxy.get():
-                        proxy_address = self.proxy_address.get().strip()
-                        if not proxy_address:
-                            messagebox.showerror("Error", "Please enter a proxy address")
-                            return
-                        proxies = {
-                            'http': proxy_address,
-                            'https': proxy_address
-                        }
-                        verify = self.verify_cert.get()
-                    
-                    # Configure session with retries
-                    session = requests.Session()
-                    retry = requests.adapters.HTTPAdapter(max_retries=3)
-                    session.mount('https://', retry)
-                    session.mount('http://', retry)
-                    
-                    # Send the request
-                    response = session.request(
-                        method=method,
-                        url=path,
-                        headers=headers,
-                        data=body,
-                        verify=verify,
-                        proxies=proxies,
-                        timeout=10
-                    )
-                    
-                    # Add request headers section
-                    request_section = tree.insert("", "end", text="Request Headers", values=("", "", ""))
-                    for header, value in headers.items():
-                        tree.insert(request_section, "end", text=header, values=(value, "Present", ""))
-                    
-                    # Add response headers section
-                    response_section = tree.insert("", "end", text="Response Headers", values=("", "", ""))
-                    
-                    # Define security headers and their recommended values
-                    security_headers = {
-                        'Strict-Transport-Security': {
-                            'recommended': 'max-age=31536000; includeSubDomains; preload',
-                            'description': 'Enforces secure (HTTPS) connections to the server',
-                            'details': 'Prevents downgrade attacks and ensures all connections use HTTPS'
-                        },
-                        'Content-Security-Policy': {
-                            'recommended': 'default-src \'self\'',
-                            'description': 'Prevents XSS and other code injection attacks',
-                            'details': 'Controls which resources can be loaded and executed'
-                        },
-                        'X-Frame-Options': {
-                            'recommended': 'DENY or SAMEORIGIN',
-                            'description': 'Prevents clickjacking attacks',
-                            'details': 'Controls whether the page can be displayed in a frame'
-                        },
-                        'X-Content-Type-Options': {
-                            'recommended': 'nosniff',
-                            'description': 'Prevents MIME type sniffing',
-                            'details': 'Prevents browsers from interpreting files as a different MIME type'
-                        },
-                        'X-XSS-Protection': {
-                            'recommended': '1; mode=block',
-                            'description': 'Enables XSS filtering',
-                            'details': 'Enables built-in XSS protection in older browsers'
-                        },
-                        'Referrer-Policy': {
-                            'recommended': 'strict-origin-when-cross-origin',
-                            'description': 'Controls referrer information',
-                            'details': 'Controls how much referrer information is sent with requests'
-                        },
-                        'Permissions-Policy': {
-                            'recommended': 'geolocation=(), microphone=(), camera=()',
-                            'description': 'Controls browser features',
-                            'details': 'Controls which browser features and APIs can be used'
-                        }
-                    }
-                    
-                    # Analyze security headers
-                    security_section = tree.insert(response_section, "end", text="Security Headers", values=("", "", ""))
-                    missing_headers = []
-                    
-                    for header, info in security_headers.items():
-                        if header in response.headers:
-                            current_value = response.headers[header]
-                            if current_value.lower() == info['recommended'].lower():
-                                status = "✅ Present"
-                                recommendation = ""
-                            else:
-                                status = "⚠️ Needs Review"
-                                recommendation = f"Current: {current_value}\nRecommended: {info['recommended']}"
-                        else:
-                            status = "❌ Missing"
-                            recommendation = f"Add header with value: {info['recommended']}"
-                            missing_headers.append(header)
-                        
-                        # Insert header with detailed information
-                        header_item = tree.insert(security_section, "end", text=header, values=(
-                            response.headers.get(header, ""),
-                            status,
-                            recommendation
-                        ))
-                        
-                        # Add details as child item
-                        tree.insert(header_item, "end", text="Details", values=(
-                            info['details'],
-                            "",
-                            ""
-                        ))
-                    
-                    # Analyze other important headers
-                    other_section = tree.insert(response_section, "end", text="Other Headers", values=("", "", ""))
-                    
-                    # Check for Server header
-                    if 'Server' in response.headers:
-                        server_item = tree.insert(other_section, "end", text="Server", values=(
-                            response.headers['Server'],
-                            "⚠️ Warning",
-                            "Consider removing or modifying to hide server information"
-                        ))
-                        tree.insert(server_item, "end", text="Details", values=(
-                            "Reveals server software and version",
-                            "",
-                            "This information can be used by attackers to target known vulnerabilities"
-                        ))
-                    
-                    # Check for X-Powered-By header
-                    if 'X-Powered-By' in response.headers:
-                        powered_item = tree.insert(other_section, "end", text="X-Powered-By", values=(
-                            response.headers['X-Powered-By'],
-                            "⚠️ Warning",
-                            "Consider removing to hide technology stack"
-                        ))
-                        tree.insert(powered_item, "end", text="Details", values=(
-                            "Reveals server-side technology",
-                            "",
-                            "This information can be used to identify potential attack vectors"
-                        ))
-                    
-                    # Check for cookies
-                    if 'Set-Cookie' in response.headers:
-                        cookie_section = tree.insert(response_section, "end", text="Cookie Security", values=("", "", ""))
-                        cookies = response.headers['Set-Cookie'].split(';')
-                        for cookie in cookies:
-                            cookie = cookie.strip()
-                            if 'Secure' not in cookie:
-                                secure_item = tree.insert(cookie_section, "end", text="Secure Flag", values=(
-                                    "Missing",
-                                    "❌ Missing",
-                                    "Add Secure flag to prevent cookie transmission over HTTP"
-                                ))
-                                tree.insert(secure_item, "end", text="Details", values=(
-                                    "Prevents cookies from being sent over unencrypted connections",
-                                    "",
-                                    "Without this flag, cookies can be intercepted in transit"
-                                ))
-                            if 'HttpOnly' not in cookie:
-                                httponly_item = tree.insert(cookie_section, "end", text="HttpOnly Flag", values=(
-                                    "Missing",
-                                    "❌ Missing",
-                                    "Add HttpOnly flag to prevent JavaScript access"
-                                ))
-                                tree.insert(httponly_item, "end", text="Details", values=(
-                                    "Prevents JavaScript access to cookies",
-                                    "",
-                                    "Without this flag, cookies can be stolen via XSS attacks"
-                                ))
-                            if 'SameSite' not in cookie:
-                                samesite_item = tree.insert(cookie_section, "end", text="SameSite Attribute", values=(
-                                    "Missing",
-                                    "❌ Missing",
-                                    "Add SameSite attribute (recommended: Strict or Lax)"
-                                ))
-                                tree.insert(samesite_item, "end", text="Details", values=(
-                                    "Prevents CSRF attacks by controlling cookie behavior",
-                                    "",
-                                    "Without this attribute, cookies can be used in CSRF attacks"
-                                ))
-                    
-                    # Update summary with formatted text
-                    summary_text.delete("1.0", tk.END)
-                    summary_text.insert("1.0", "Security Headers Summary\n", "header")
-                    
-                    if missing_headers:
-                        summary_text.insert(tk.END, "\nMissing Security Headers:\n", "error")
-                        for header in missing_headers:
-                            info = security_headers[header]
-                            summary_text.insert(tk.END, f"• {header}\n", "error")
-                            summary_text.insert(tk.END, f"  {info['description']}\n\n", "error")
-                    else:
-                        summary_text.insert(tk.END, "\n✅ All recommended security headers are present\n\n", "success")
-                    
-                    if 'Server' in response.headers or 'X-Powered-By' in response.headers:
-                        summary_text.insert(tk.END, "⚠️ Server Information Disclosure:\n", "warning")
-                        if 'Server' in response.headers:
-                            summary_text.insert(tk.END, f"• Server header reveals: {response.headers['Server']}\n", "warning")
-                        if 'X-Powered-By' in response.headers:
-                            summary_text.insert(tk.END, f"• X-Powered-By header reveals: {response.headers['X-Powered-By']}\n", "warning")
-                        summary_text.insert(tk.END, "\n", "warning")
-                    
-                    if 'Set-Cookie' in response.headers:
-                        summary_text.insert(tk.END, "⚠️ Cookie Security Issues:\n", "warning")
-                        cookies = response.headers['Set-Cookie'].split(';')
-                        for cookie in cookies:
-                            cookie = cookie.strip()
-                            if 'Secure' not in cookie:
-                                summary_text.insert(tk.END, "• Missing Secure flag - Cookies can be intercepted\n", "warning")
-                            if 'HttpOnly' not in cookie:
-                                summary_text.insert(tk.END, "• Missing HttpOnly flag - Vulnerable to XSS\n", "warning")
-                            if 'SameSite' not in cookie:
-                                summary_text.insert(tk.END, "• Missing SameSite attribute - Vulnerable to CSRF\n", "warning")
-                        summary_text.insert(tk.END, "\n", "warning")
-                    
-                    # Add detailed overall security assessment with attack suggestions
-                    summary_text.insert(tk.END, "Penetration Testing Opportunities:\n", "header")
-                    
-                    if not missing_headers and not ('Server' in response.headers or 'X-Powered-By' in response.headers):
-                        summary_text.insert(tk.END, "✅ Strong Security Configuration\n", "success")
-                        summary_text.insert(tk.END, "• All essential security headers are present and properly configured\n", "success")
-                        summary_text.insert(tk.END, "• No server information disclosure\n", "success")
-                        if 'Set-Cookie' in response.headers:
-                            summary_text.insert(tk.END, "• Cookie security needs review\n", "warning")
-                    else:
-                        summary_text.insert(tk.END, "⚠️ Potential Attack Vectors:\n", "warning")
-                        
-                        # Check for specific missing headers and suggest attacks
-                        if 'X-Frame-Options' in missing_headers:
-                            summary_text.insert(tk.END, "• Clickjacking Attack:\n", "error")
-                            summary_text.insert(tk.END, "  - Create a malicious page with an iframe targeting this endpoint\n", "error")
-                            summary_text.insert(tk.END, "  - Use CSS to make the iframe transparent and position it over a fake login form\n", "error")
-                            summary_text.insert(tk.END, "  - Test with different frame-busting techniques\n\n", "error")
-                        
-                        if 'Content-Security-Policy' in missing_headers:
-                            summary_text.insert(tk.END, "• XSS Attack:\n", "error")
-                            summary_text.insert(tk.END, "  - Test with basic XSS payloads: <script>alert(1)</script>\n", "error")
-                            summary_text.insert(tk.END, "  - Try DOM-based XSS: <img src=x onerror=alert(1)>\n", "error")
-                            summary_text.insert(tk.END, "  - Test with event handlers: onmouseover=alert(1)\n\n", "error")
-                        
-                        if 'Strict-Transport-Security' in missing_headers:
-                            summary_text.insert(tk.END, "• SSL Stripping Attack:\n", "error")
-                            summary_text.insert(tk.END, "  - Attempt to downgrade HTTPS to HTTP\n", "error")
-                            summary_text.insert(tk.END, "  - Test with tools like sslstrip\n", "error")
-                            summary_text.insert(tk.END, "  - Check for mixed content vulnerabilities\n\n", "error")
-                        
-                        if 'X-Content-Type-Options' in missing_headers:
-                            summary_text.insert(tk.END, "• MIME Type Sniffing Attack:\n", "error")
-                            summary_text.insert(tk.END, "  - Upload files with incorrect MIME types\n", "error")
-                            summary_text.insert(tk.END, "  - Test with HTML files uploaded as images\n", "error")
-                            summary_text.insert(tk.END, "  - Check for XSS via file upload\n\n", "error")
-                        
-                        if 'Set-Cookie' in response.headers:
-                            cookies = response.headers['Set-Cookie'].split(';')
-                            for cookie in cookies:
-                                cookie = cookie.strip()
-                                if 'HttpOnly' not in cookie:
-                                    summary_text.insert(tk.END, "• Cookie Theft via XSS:\n", "error")
-                                    summary_text.insert(tk.END, "  - If XSS is found, cookies can be stolen\n", "error")
-                                    summary_text.insert(tk.END, "  - Test with document.cookie access\n", "error")
-                                    summary_text.insert(tk.END, "  - Check for session hijacking possibilities\n\n", "error")
-                                
-                                if 'SameSite' not in cookie:
-                                    summary_text.insert(tk.END, "• CSRF Attack:\n", "error")
-                                    summary_text.insert(tk.END, "  - Create a malicious form that submits to this endpoint\n", "error")
-                                    summary_text.insert(tk.END, "  - Test with different HTTP methods\n", "error")
-                                    summary_text.insert(tk.END, "  - Check for state-changing operations\n\n", "error")
-                        
-                        if 'Server' in response.headers or 'X-Powered-By' in response.headers:
-                            summary_text.insert(tk.END, "• Version-Specific Exploits:\n", "error")
-                            summary_text.insert(tk.END, "  - Research known vulnerabilities for the server version\n", "error")
-                            summary_text.insert(tk.END, "  - Check for default credentials\n", "error")
-                            summary_text.insert(tk.END, "  - Look for version-specific misconfigurations\n\n", "error")
-                    
-                    # Make summary text read-only
-                    summary_text.config(state='disabled')
-                    
-                except requests.RequestException as e:
-                    tree.insert("", "end", text="Error", values=("", "❌ Failed", f"Failed to send request: {str(e)}"))
-                except Exception as e:
-                    tree.insert("", "end", text="Error", values=("", "❌ Failed", f"Error: {str(e)}"))
-                finally:
-                    # Update UI in main thread
-                    headers_window.after(0, lambda: update_ui())
-            
-            def update_ui():
-                # Stop progress and clean up
-                progress.stop()
-                progress_frame.destroy()
-                analyze_button.config(state='normal')
-            
-            # Start analysis in separate thread
-            import threading
-            threading.Thread(target=perform_analysis, daemon=True).start()
-        
-        # Add analyze button
-        analyze_button = ttk.Button(main_frame, text="Analyze Headers", command=analyze)
-        analyze_button.pack(pady=10)
 
 def main():
     root = tk.Tk()
