@@ -2801,7 +2801,12 @@ Attack Details:
             # Parse request headers
             request_headers = {}
             request_lines = request_text.split('\n')
-            for line in request_lines[1:]:  # Skip first line (method and path)
+            
+            # Skip the first line (request line)
+            for line in request_lines[1:]:
+                # Stop if we hit an empty line (end of headers)
+                if not line.strip():
+                    break
                 if ':' in line:
                     key, value = line.split(':', 1)
                     request_headers[key.strip()] = value.strip()
@@ -2848,7 +2853,12 @@ Attack Details:
             # Parse response headers
             response_headers = {}
             response_lines = response_text.split('\n')
-            for line in response_lines:
+            
+            # Skip the first line (status line)
+            for line in response_lines[1:]:
+                # Stop if we hit an empty line (end of headers)
+                if not line.strip():
+                    break
                 if ':' in line:
                     key, value = line.split(':', 1)
                     response_headers[key.strip()] = value.strip()
