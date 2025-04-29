@@ -2653,12 +2653,12 @@ Attack Details:
         main_frame = ttk.Frame(headers_window)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        # Create results frame
+        # Create split frames for results and summary
         results_frame = ttk.LabelFrame(main_frame, text="Headers Analysis Results")
         results_frame.pack(fill=tk.BOTH, expand=True, pady=5)
         
-        # Create treeview for results
-        tree = ttk.Treeview(results_frame, columns=("Value", "Status", "Recommendation"), show="tree headings")
+        # Create treeview for results with reduced height
+        tree = ttk.Treeview(results_frame, columns=("Value", "Status", "Recommendation"), show="tree headings", height=15)
         tree.heading("#0", text="Header")
         tree.heading("Value", text="Value")
         tree.heading("Status", text="Status")
@@ -2682,11 +2682,11 @@ Attack Details:
         
         # Create summary frame with larger size
         summary_frame = ttk.LabelFrame(main_frame, text="Security Summary")
-        summary_frame.pack(fill=tk.X, pady=5, padx=5)
+        summary_frame.pack(fill=tk.BOTH, expand=True, pady=5, padx=5)
         
         # Create summary text with larger height and font
-        summary_text = tk.Text(summary_frame, height=8, wrap=tk.WORD, font=("Arial", 10))
-        summary_text.pack(fill=tk.X, padx=5, pady=5)
+        summary_text = tk.Text(summary_frame, height=20, wrap=tk.WORD, font=("Arial", 10))
+        summary_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # Add tags for different types of text
         summary_text.tag_configure("header", font=("Arial", 12, "bold"))
@@ -2795,37 +2795,37 @@ Attack Details:
                         'Strict-Transport-Security': {
                             'recommended': 'max-age=31536000; includeSubDomains; preload',
                             'description': 'Enforces secure (HTTPS) connections to the server',
-                            'risk': 'High'
+                            'details': 'Prevents downgrade attacks and ensures all connections use HTTPS'
                         },
                         'Content-Security-Policy': {
                             'recommended': 'default-src \'self\'',
                             'description': 'Prevents XSS and other code injection attacks',
-                            'risk': 'High'
+                            'details': 'Controls which resources can be loaded and executed'
                         },
                         'X-Frame-Options': {
                             'recommended': 'DENY or SAMEORIGIN',
                             'description': 'Prevents clickjacking attacks',
-                            'risk': 'Medium'
+                            'details': 'Controls whether the page can be displayed in a frame'
                         },
                         'X-Content-Type-Options': {
                             'recommended': 'nosniff',
                             'description': 'Prevents MIME type sniffing',
-                            'risk': 'Medium'
+                            'details': 'Prevents browsers from interpreting files as a different MIME type'
                         },
                         'X-XSS-Protection': {
                             'recommended': '1; mode=block',
                             'description': 'Enables XSS filtering',
-                            'risk': 'Medium'
+                            'details': 'Enables built-in XSS protection in older browsers'
                         },
                         'Referrer-Policy': {
                             'recommended': 'strict-origin-when-cross-origin',
                             'description': 'Controls referrer information',
-                            'risk': 'Low'
+                            'details': 'Controls how much referrer information is sent with requests'
                         },
                         'Permissions-Policy': {
                             'recommended': 'geolocation=(), microphone=(), camera=()',
                             'description': 'Controls browser features',
-                            'risk': 'Low'
+                            'details': 'Controls which browser features and APIs can be used'
                         }
                     }
                     
@@ -2837,20 +2837,28 @@ Attack Details:
                         if header in response.headers:
                             current_value = response.headers[header]
                             if current_value.lower() == info['recommended'].lower():
-                                status = "✅ Secure"
+                                status = "✅ Present"
                                 recommendation = ""
                             else:
                                 status = "⚠️ Needs Review"
-                                recommendation = f"Recommended: {info['recommended']}"
+                                recommendation = f"Current: {current_value}\nRecommended: {info['recommended']}"
                         else:
                             status = "❌ Missing"
                             recommendation = f"Add header with value: {info['recommended']}"
                             missing_headers.append(header)
                         
-                        tree.insert(security_section, "end", text=header, values=(
+                        # Insert header with detailed information
+                        header_item = tree.insert(security_section, "end", text=header, values=(
                             response.headers.get(header, ""),
                             status,
                             recommendation
+                        ))
+                        
+                        # Add details as child item
+                        tree.insert(header_item, "end", text="Details", values=(
+                            info['details'],
+                            "",
+                            ""
                         ))
                     
                     # Analyze other important headers
@@ -2858,18 +2866,28 @@ Attack Details:
                     
                     # Check for Server header
                     if 'Server' in response.headers:
-                        tree.insert(other_section, "end", text="Server", values=(
+                        server_item = tree.insert(other_section, "end", text="Server", values=(
                             response.headers['Server'],
                             "⚠️ Warning",
                             "Consider removing or modifying to hide server information"
                         ))
+                        tree.insert(server_item, "end", text="Details", values=(
+                            "Reveals server software and version",
+                            "",
+                            "This information can be used by attackers to target known vulnerabilities"
+                        ))
                     
                     # Check for X-Powered-By header
                     if 'X-Powered-By' in response.headers:
-                        tree.insert(other_section, "end", text="X-Powered-By", values=(
+                        powered_item = tree.insert(other_section, "end", text="X-Powered-By", values=(
                             response.headers['X-Powered-By'],
                             "⚠️ Warning",
                             "Consider removing to hide technology stack"
+                        ))
+                        tree.insert(powered_item, "end", text="Details", values=(
+                            "Reveals server-side technology",
+                            "",
+                            "This information can be used to identify potential attack vectors"
                         ))
                     
                     # Check for cookies
@@ -2879,22 +2897,37 @@ Attack Details:
                         for cookie in cookies:
                             cookie = cookie.strip()
                             if 'Secure' not in cookie:
-                                tree.insert(cookie_section, "end", text="Secure Flag", values=(
+                                secure_item = tree.insert(cookie_section, "end", text="Secure Flag", values=(
                                     "Missing",
                                     "❌ Missing",
                                     "Add Secure flag to prevent cookie transmission over HTTP"
                                 ))
+                                tree.insert(secure_item, "end", text="Details", values=(
+                                    "Prevents cookies from being sent over unencrypted connections",
+                                    "",
+                                    "Without this flag, cookies can be intercepted in transit"
+                                ))
                             if 'HttpOnly' not in cookie:
-                                tree.insert(cookie_section, "end", text="HttpOnly Flag", values=(
+                                httponly_item = tree.insert(cookie_section, "end", text="HttpOnly Flag", values=(
                                     "Missing",
                                     "❌ Missing",
                                     "Add HttpOnly flag to prevent JavaScript access"
                                 ))
+                                tree.insert(httponly_item, "end", text="Details", values=(
+                                    "Prevents JavaScript access to cookies",
+                                    "",
+                                    "Without this flag, cookies can be stolen via XSS attacks"
+                                ))
                             if 'SameSite' not in cookie:
-                                tree.insert(cookie_section, "end", text="SameSite Attribute", values=(
+                                samesite_item = tree.insert(cookie_section, "end", text="SameSite Attribute", values=(
                                     "Missing",
                                     "❌ Missing",
                                     "Add SameSite attribute (recommended: Strict or Lax)"
+                                ))
+                                tree.insert(samesite_item, "end", text="Details", values=(
+                                    "Prevents CSRF attacks by controlling cookie behavior",
+                                    "",
+                                    "Without this attribute, cookies can be used in CSRF attacks"
                                 ))
                     
                     # Update summary with formatted text
@@ -2904,37 +2937,56 @@ Attack Details:
                     if missing_headers:
                         summary_text.insert(tk.END, "\nMissing Security Headers:\n", "error")
                         for header in missing_headers:
+                            info = security_headers[header]
                             summary_text.insert(tk.END, f"• {header}\n", "error")
+                            summary_text.insert(tk.END, f"  {info['description']}\n\n", "error")
                     else:
-                        summary_text.insert(tk.END, "\n✅ All recommended security headers are present\n", "success")
+                        summary_text.insert(tk.END, "\n✅ All recommended security headers are present\n\n", "success")
                     
                     if 'Server' in response.headers or 'X-Powered-By' in response.headers:
-                        summary_text.insert(tk.END, "\n⚠️ Server Information Disclosure:\n", "warning")
+                        summary_text.insert(tk.END, "⚠️ Server Information Disclosure:\n", "warning")
                         if 'Server' in response.headers:
                             summary_text.insert(tk.END, f"• Server header reveals: {response.headers['Server']}\n", "warning")
                         if 'X-Powered-By' in response.headers:
                             summary_text.insert(tk.END, f"• X-Powered-By header reveals: {response.headers['X-Powered-By']}\n", "warning")
+                        summary_text.insert(tk.END, "\n", "warning")
                     
                     if 'Set-Cookie' in response.headers:
-                        summary_text.insert(tk.END, "\n⚠️ Cookie Security Issues:\n", "warning")
+                        summary_text.insert(tk.END, "⚠️ Cookie Security Issues:\n", "warning")
                         cookies = response.headers['Set-Cookie'].split(';')
                         for cookie in cookies:
                             cookie = cookie.strip()
                             if 'Secure' not in cookie:
-                                summary_text.insert(tk.END, "• Missing Secure flag\n", "warning")
+                                summary_text.insert(tk.END, "• Missing Secure flag - Cookies can be intercepted\n", "warning")
                             if 'HttpOnly' not in cookie:
-                                summary_text.insert(tk.END, "• Missing HttpOnly flag\n", "warning")
+                                summary_text.insert(tk.END, "• Missing HttpOnly flag - Vulnerable to XSS\n", "warning")
                             if 'SameSite' not in cookie:
-                                summary_text.insert(tk.END, "• Missing SameSite attribute\n", "warning")
+                                summary_text.insert(tk.END, "• Missing SameSite attribute - Vulnerable to CSRF\n", "warning")
+                        summary_text.insert(tk.END, "\n", "warning")
                     
-                    # Add overall security rating
-                    summary_text.insert(tk.END, "\nOverall Security Rating:\n", "header")
+                    # Add detailed overall security assessment
+                    summary_text.insert(tk.END, "Overall Security Assessment:\n", "header")
+                    
                     if not missing_headers and not ('Server' in response.headers or 'X-Powered-By' in response.headers):
-                        summary_text.insert(tk.END, "✅ Good - All security headers are properly configured\n", "success")
+                        summary_text.insert(tk.END, "✅ Strong Security Configuration\n", "success")
+                        summary_text.insert(tk.END, "• All essential security headers are present and properly configured\n", "success")
+                        summary_text.insert(tk.END, "• No server information disclosure\n", "success")
+                        if 'Set-Cookie' in response.headers:
+                            summary_text.insert(tk.END, "• Cookie security needs review\n", "warning")
                     elif len(missing_headers) <= 2:
-                        summary_text.insert(tk.END, "⚠️ Fair - Some security headers are missing\n", "warning")
+                        summary_text.insert(tk.END, "⚠️ Moderate Security Configuration\n", "warning")
+                        summary_text.insert(tk.END, f"• {len(missing_headers)} security headers are missing\n", "warning")
+                        if 'Server' in response.headers or 'X-Powered-By' in response.headers:
+                            summary_text.insert(tk.END, "• Server information is being disclosed\n", "warning")
+                        if 'Set-Cookie' in response.headers:
+                            summary_text.insert(tk.END, "• Cookie security needs improvement\n", "warning")
                     else:
-                        summary_text.insert(tk.END, "❌ Poor - Multiple security headers are missing\n", "error")
+                        summary_text.insert(tk.END, "❌ Weak Security Configuration\n", "error")
+                        summary_text.insert(tk.END, f"• {len(missing_headers)} critical security headers are missing\n", "error")
+                        if 'Server' in response.headers or 'X-Powered-By' in response.headers:
+                            summary_text.insert(tk.END, "• Server information is being disclosed\n", "error")
+                        if 'Set-Cookie' in response.headers:
+                            summary_text.insert(tk.END, "• Cookie security is insufficient\n", "error")
                     
                     # Make summary text read-only
                     summary_text.config(state='disabled')
