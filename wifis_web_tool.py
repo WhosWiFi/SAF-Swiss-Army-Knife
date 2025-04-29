@@ -2784,10 +2784,9 @@ Attack Details:
         
         if not request_text:
             # Create empty tree for request headers
-            request_tree = ttk.Treeview(request_frame, columns=("Value", "Description"), show="tree")
+            request_tree = ttk.Treeview(request_frame, columns=("Value"), show="tree")
             request_tree.heading("#0", text="Header")
             request_tree.heading("Value", text="Value")
-            request_tree.heading("Description", text="Description")
             request_tree.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
             
             # Add scrollbar
@@ -2796,7 +2795,7 @@ Attack Details:
             request_tree.config(yscrollcommand=scrollbar.set)
             scrollbar.config(command=request_tree.yview)
             
-            request_tree.insert("", tk.END, text="No Headers", values=("", "No request headers to analyze"))
+            request_tree.insert("", tk.END, text="No Headers", values=("No request headers to analyze"))
         else:
             # Parse request headers
             request_headers = {}
@@ -2812,10 +2811,9 @@ Attack Details:
                     request_headers[key.strip()] = value.strip()
             
             # Create tree for request headers
-            request_tree = ttk.Treeview(request_frame, columns=("Value", "Description"), show="tree")
+            request_tree = ttk.Treeview(request_frame, columns=("Value"), show="tree")
             request_tree.heading("#0", text="Header")
             request_tree.heading("Value", text="Value")
-            request_tree.heading("Description", text="Description")
             request_tree.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
             
             # Add scrollbar
@@ -2827,19 +2825,18 @@ Attack Details:
             # Add request headers to tree
             for header, value in request_headers.items():
                 header_item = request_tree.insert("", tk.END, text=header)
-                request_tree.insert(header_item, tk.END, text="Value", values=(value, ""))
+                request_tree.insert(header_item, tk.END, text=f"Value: {value}")
                 description = self.header_info.get(header, "Custom header")
-                request_tree.insert(header_item, tk.END, text="Description", values=("", description))
+                request_tree.insert(header_item, tk.END, text=f"Description: {description}")
         
         # Get response text
         response_text = self.response_text.get("1.0", tk.END).strip()
         
         if not response_text:
             # Create empty tree for response headers
-            response_tree = ttk.Treeview(response_frame, columns=("Value", "Description"), show="tree")
+            response_tree = ttk.Treeview(response_frame, columns=("Value"), show="tree")
             response_tree.heading("#0", text="Header")
             response_tree.heading("Value", text="Value")
-            response_tree.heading("Description", text="Description")
             response_tree.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
             
             # Add scrollbar
@@ -2848,7 +2845,7 @@ Attack Details:
             response_tree.config(yscrollcommand=scrollbar.set)
             scrollbar.config(command=response_tree.yview)
             
-            response_tree.insert("", tk.END, text="No Headers", values=("", "No response headers to analyze"))
+            response_tree.insert("", tk.END, text="No Headers", values=("No response headers to analyze"))
         else:
             # Parse response headers
             response_headers = {}
@@ -2864,10 +2861,9 @@ Attack Details:
                     response_headers[key.strip()] = value.strip()
             
             # Create tree for response headers
-            response_tree = ttk.Treeview(response_frame, columns=("Value", "Description"), show="tree")
+            response_tree = ttk.Treeview(response_frame, columns=("Value"), show="tree")
             response_tree.heading("#0", text="Header")
             response_tree.heading("Value", text="Value")
-            response_tree.heading("Description", text="Description")
             response_tree.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
             
             # Add scrollbar
@@ -2879,9 +2875,9 @@ Attack Details:
             # Add response headers to tree
             for header, value in response_headers.items():
                 header_item = response_tree.insert("", tk.END, text=header)
-                response_tree.insert(header_item, tk.END, text="Value", values=(value, ""))
+                response_tree.insert(header_item, tk.END, text=f"Value: {value}")
                 description = self.header_info.get(header, "Custom header")
-                response_tree.insert(header_item, tk.END, text="Description", values=("", description))
+                response_tree.insert(header_item, tk.END, text=f"Description: {description}")
 
 def main():
     root = tk.Tk()
