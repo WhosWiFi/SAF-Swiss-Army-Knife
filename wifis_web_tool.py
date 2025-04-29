@@ -140,6 +140,10 @@ class HTTPRequestTool:
         self.cert_check = ttk.Checkbutton(proxy_frame, text="Verify Proxy Cert", variable=self.verify_cert)
         self.cert_check.pack(side=tk.LEFT, padx=5)
 
+        # Add Wayback Machine button
+        self.wayback_button = ttk.Button(button_frame, text="Wayback Machine", command=self.search_wayback_machine)
+        self.wayback_button.pack(side=tk.LEFT, padx=5)
+
     def is_jwt(self, token):
         # Split the token into parts
         parts = token.split('.')
@@ -2421,6 +2425,189 @@ Attack Details:
             
             # Configure highlight tag
             trace_text.tag_configure('highlight', background='#ffcccc', foreground='black')
+
+    def search_wayback_machine(self):
+        # Create a new window for Wayback Machine search
+        wayback_window = tk.Toplevel(self.root)
+        wayback_window.title("Wayback Machine Search")
+        wayback_window.geometry("800x600")
+        
+        # Create main frame
+        main_frame = ttk.Frame(wayback_window)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Create input frame
+        input_frame = ttk.Frame(main_frame)
+        input_frame.pack(fill=tk.X, pady=5)
+        
+        # Add URL entry
+        ttk.Label(input_frame, text="Enter URL to search:").pack(side=tk.LEFT, padx=5)
+        url_entry = ttk.Entry(input_frame, width=50)
+        url_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        
+        # Create results frame
+        results_frame = ttk.LabelFrame(main_frame, text="Wayback Machine Results")
+        results_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        
+        # Create text area for results
+        results_text = tk.Text(results_frame, wrap=tk.WORD)
+        results_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Add scrollbar
+        scrollbar = ttk.Scrollbar(results_text)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        results_text.config(yscrollcommand=scrollbar.set)
+        scrollbar.config(command=results_text.yview)
+        
+        def search():
+            url = url_entry.get().strip()
+            if not url:
+                messagebox.showerror("Error", "Please enter a URL to search")
+                return
+            
+            # Disable search button and show progress
+            search_button.config(state='disabled')
+            progress_frame = ttk.Frame(main_frame)
+            progress_frame.pack(fill=tk.X, pady=5)
+            progress_label = ttk.Label(progress_frame, text="Searching Wayback Machine...")
+            progress_label.pack(side=tk.LEFT, padx=5)
+            progress = ttk.Progressbar(progress_frame, mode='indeterminate')
+            progress.pack(fill=tk.X, expand=True, padx=5)
+            progress.start()
+            
+            def perform_search():
+                try:
+                    # Clear previous results
+                    results_text.delete("1.0", tk.END)
+                    results_text.insert("1.0", f"Searching Wayback Machine for URLs from: {url}\n\n")
+                    
+                    # Extract domain from URL
+                    parsed_url = urlparse(url)
+                    domain = parsed_url.netloc
+                    
+                    # Configure session with retries and longer timeout
+                    session = requests.Session()
+                    retry = requests.adapters.HTTPAdapter(max_retries=3)
+                    session.mount('https://', retry)
+                    session.mount('http://', retry)
+                    
+                    # Initialize variables for pagination
+                    page = 0
+                    page_size = 50  # Default page size
+                    all_results = []
+                    
+                    # First get total number of pages
+                    num_pages_url = f"https://web.archive.org/cdx/search/cdx?url={domain}&matchType=domain&output=json&showNumPages=true"
+                    try:
+                        num_pages_response = session.get(num_pages_url, timeout=60)
+                        if num_pages_response.status_code == 200:
+                            total_pages = int(num_pages_response.text.strip())
+                            results_text.insert(tk.END, f"Found {total_pages} pages of results...\n")
+                        else:
+                            total_pages = 1  # Fallback if we can't get total pages
+                    except:
+                        total_pages = 1  # Fallback if we can't get total pages
+                    
+                    while page < total_pages:
+                        # Construct the Wayback Machine CDX API URL with proper format and pagination
+                        wayback_url = f"https://web.archive.org/cdx/search/cdx?url={domain}&matchType=domain&output=json&fl=timestamp,original,mimetype,statuscode,digest,length&collapse=urlkey&page={page}&pageSize={page_size}"
+                        
+                        # Send request to Wayback Machine API with longer timeout
+                        response = session.get(wayback_url, timeout=60)
+                        
+                        if response.status_code != 200:
+                            results_text.insert(tk.END, f"Error: Failed to fetch data from Wayback Machine (Status code: {response.status_code})")
+                            break
+                        
+                        # Parse the JSON response
+                        data = response.json()
+                        if not data or len(data) <= 1:  # First row is headers
+                            break
+                        
+                        # Process results
+                        for row in data[1:]:
+                            try:
+                                timestamp, original, mimetype, statuscode, digest, length = row
+                                if not all([timestamp, original, mimetype, statuscode, digest, length]):
+                                    continue
+                                
+                                # Add result to collection
+                                all_results.append(row)
+                            except:
+                                continue
+                        
+                        # Update progress
+                        results_text.insert(tk.END, f"Processed page {page + 1}/{total_pages}. Found {len(all_results)} URLs so far...\n")
+                        results_text.see(tk.END)
+                        
+                        # Move to next page
+                        page += 1
+                    
+                    # Display results
+                    if not all_results:
+                        results_text.insert(tk.END, "No archived URLs found for this domain")
+                        return
+                    
+                    results_text.delete("1.0", tk.END)
+                    results_text.insert(tk.END, f"Found {len(all_results)} unique URLs from {domain}:\n\n")
+                    
+                    # Process and display all results
+                    for row in all_results:
+                        try:
+                            timestamp, original, mimetype, statuscode, digest, length = row
+                            
+                            # Skip if any required field is missing
+                            if not all([timestamp, original, mimetype, statuscode, digest, length]):
+                                continue
+                            
+                            # Format the timestamp into a readable date
+                            date = datetime.strptime(timestamp, "%Y%m%d%H%M%S").strftime("%Y-%m-%d %H:%M:%S")
+                            
+                            # Create the Wayback Machine URL for this snapshot
+                            wayback_snapshot = f"https://web.archive.org/web/{timestamp}/{original}"
+                            
+                            # Insert results with proper formatting
+                            results_text.insert(tk.END, f"URL: {original}\n")
+                            results_text.insert(tk.END, f"First Archived: {date}\n")
+                            results_text.insert(tk.END, f"Status: {statuscode}\n")
+                            results_text.insert(tk.END, f"Type: {mimetype}\n")
+                            results_text.insert(tk.END, f"Size: {int(length)/1024:.2f} KB\n")
+                            results_text.insert(tk.END, f"Archive Link: {wayback_snapshot}\n")
+                            results_text.insert(tk.END, "-" * 80 + "\n\n")
+                            
+                            # Update the UI periodically to show progress
+                            wayback_window.after(0, lambda: results_text.see(tk.END))
+                            
+                        except Exception as e:
+                            # Skip problematic rows but continue processing
+                            continue
+                    
+                    # Add summary at the end
+                    results_text.insert(tk.END, f"\nSearch completed. Found {len(all_results)} unique URLs from {domain}.\n")
+                    
+                except requests.Timeout:
+                    results_text.insert(tk.END, "Error: Request timed out. The Wayback Machine might be busy. Please try again later.")
+                except requests.RequestException as e:
+                    results_text.insert(tk.END, f"Error: Failed to connect to Wayback Machine. Please check your internet connection and try again.\nError details: {str(e)}")
+                except Exception as e:
+                    results_text.insert(tk.END, f"Error: {str(e)}")
+                finally:
+                    # Update UI in main thread
+                    wayback_window.after(0, lambda: update_ui())
+            
+            def update_ui():
+                # Stop progress and clean up
+                progress.stop()
+                progress_frame.destroy()
+                search_button.config(state='normal')
+            
+            # Start search in separate thread
+            import threading
+            threading.Thread(target=perform_search, daemon=True).start()
+        
+        # Add search button
+        search_button = ttk.Button(input_frame, text="Search", command=search)
+        search_button.pack(side=tk.LEFT, padx=5)
 
 def main():
     root = tk.Tk()
