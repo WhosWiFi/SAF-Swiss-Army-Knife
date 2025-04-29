@@ -2153,7 +2153,18 @@ Attack Details:
             ],
             "Hardcoded URLs": [
                 r'https?://[^\s<>"]+',  # Simple URL pattern
-            ]
+            ],
+            "Environment Variables and Secrets": [
+                r'SECRET_KEY["\']?\s*[:=]\s*["\']?([A-Za-z0-9_-]+)["\']?',
+                r'SECRET[_-]?TOKEN["\']?\s*[:=]\s*["\']?([A-Za-z0-9_-]+)["\']?',
+                r'\$_SERVER\[["\']SECRET_KEY["\']\]',
+                r'\$_ENV\[["\']SECRET_KEY["\']\]',
+                r'getenv\(["\']SECRET_KEY["\']\)',
+                r'APP_SECRET["\']?\s*[:=]\s*["\']?([A-Za-z0-9_-]+)["\']?',
+                r'APP_KEY["\']?\s*[:=]\s*["\']?([A-Za-z0-9_-]+)["\']?',
+                r'ENV[_-]?SECRET["\']?\s*[:=]\s*["\']?([A-Za-z0-9_-]+)["\']?',
+                r'ENV[_-]?KEY["\']?\s*[:=]\s*["\']?([A-Za-z0-9_-]+)["\']?',
+            ],
         }
 
         # List of allowed domains (not to be flagged)
