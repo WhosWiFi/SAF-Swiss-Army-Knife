@@ -121,6 +121,10 @@ class HTTPRequestTool:
         self.analyze_static_button = ttk.Button(button_frame, text="Analyze Static File", command=self.analyze_static_file)
         self.analyze_static_button.pack(side=tk.LEFT, padx=5)
         
+        # Add Analyze Headers button
+        self.analyze_headers_button = ttk.Button(button_frame, text="Analyze Headers", command=self.analyze_headers)
+        self.analyze_headers_button.pack(side=tk.LEFT, padx=5)
+        
         # Add proxy configuration frame
         proxy_frame = ttk.Frame(self.request_frame)
         proxy_frame.pack(fill=tk.X, pady=5)
@@ -162,6 +166,102 @@ class HTTPRequestTool:
         self.verify_cert = tk.BooleanVar(value=False)
         self.cert_check = ttk.Checkbutton(proxy_frame, text="Verify Proxy Cert", variable=self.verify_cert)
         self.cert_check.pack(side=tk.LEFT, padx=5)
+
+        # Dictionary of header information
+        self.header_info = {
+            # Request Headers
+            "A-IM": "Acceptable instance-manipulations for the request",
+            "Accept": "Media type(s) that are acceptable for the response",
+            "Accept-Charset": "Character sets that are acceptable",
+            "Accept-Datetime": "Acceptable version in time",
+            "Accept-Encoding": "List of acceptable encodings",
+            "Accept-Language": "List of acceptable human languages for response",
+            "Access-Control-Request-Method": "Initiates a request for cross-origin resource sharing",
+            "Access-Control-Request-Headers": "Initiates a request for cross-origin resource sharing",
+            "Authorization": "Authentication credentials for HTTP authentication",
+            "Cache-Control": "Used to specify directives for caching mechanisms",
+            "Connection": "Control options for the current connection",
+            "Content-Encoding": "The type of encoding used on the data",
+            "Content-Length": "The length of the request body in octets",
+            "Content-MD5": "A Base64-encoded binary MD5 sum of the content",
+            "Content-Type": "The Media type of the body of the request",
+            "Cookie": "An HTTP cookie previously sent by the server",
+            "Date": "The date and time at which the message was originated",
+            "Expect": "Indicates that particular server behaviors are required",
+            "Forwarded": "Disclose original information of a client",
+            "From": "The email address of the user making the request",
+            "Host": "The domain name of the server and TCP port number",
+            "HTTP2-Settings": "Parameters that govern the HTTP/2 connection",
+            "If-Match": "Only perform the action if the client supplied entity matches",
+            "If-Modified-Since": "Allows a 304 Not Modified to be returned",
+            "If-None-Match": "Allows a 304 Not Modified to be returned",
+            "If-Range": "If the entity is unchanged, send missing parts",
+            "If-Unmodified-Since": "Only send the response if not modified since",
+            "Max-Forwards": "Limit the number of times the message can be forwarded",
+            "Origin": "Initiates a request for cross-origin resource sharing",
+            "Pragma": "Implementation-specific fields",
+            "Prefer": "Allows client to request certain behaviors",
+            "Proxy-Authorization": "Authorization credentials for connecting to a proxy",
+            "Range": "Request only part of an entity",
+            "Referer": "The address of the previous web page",
+            "TE": "The transfer encodings the user agent is willing to accept",
+            "Trailer": "Indicates header fields present in the trailer",
+            "Transfer-Encoding": "The form of encoding used to transfer the entity",
+            "User-Agent": "The user agent string of the user agent",
+            "Upgrade": "Ask the server to upgrade to another protocol",
+            "Via": "Informs the server of proxies through which the request was sent",
+            "Warning": "A general warning about possible problems",
+            
+            # Response Headers
+            "Accept-CH": "Requests HTTP Client Hints",
+            "Access-Control-Allow-Origin": "Specifies which web sites can participate in CORS",
+            "Access-Control-Allow-Credentials": "Indicates whether credentials can be exposed",
+            "Access-Control-Expose-Headers": "Indicates which headers can be exposed",
+            "Access-Control-Max-Age": "Indicates how long preflight results can be cached",
+            "Access-Control-Allow-Methods": "Specifies the methods allowed",
+            "Access-Control-Allow-Headers": "Indicates which headers can be used",
+            "Accept-Patch": "Specifies which patch document formats are supported",
+            "Accept-Ranges": "What partial content range types are supported",
+            "Age": "The age the object has been in a proxy cache",
+            "Allow": "Valid methods for a specified resource",
+            "Alt-Svc": "Alternative services available",
+            "Cache-Control": "Tells caching mechanisms whether they may cache",
+            "Connection": "Control options for the current connection",
+            "Content-Disposition": "An opportunity to raise a 'File Download' dialogue",
+            "Content-Encoding": "The type of encoding used on the data",
+            "Content-Language": "The natural language of the intended audience",
+            "Content-Length": "The length of the response body in octets",
+            "Content-Location": "An alternate location for the returned data",
+            "Content-MD5": "A Base64-encoded binary MD5 sum of the content",
+            "Content-Range": "Where in a full body message this partial message belongs",
+            "Content-Type": "The MIME type of this content",
+            "Date": "The date and time that the message was sent",
+            "Delta-Base": "Specifies the delta-encoding entity tag",
+            "ETag": "An identifier for a specific version of a resource",
+            "Expires": "Gives the date/time after which the response is stale",
+            "IM": "Instance-manipulations applied to the response",
+            "Last-Modified": "The last modified date for the requested object",
+            "Link": "Used to express a typed relationship with another resource",
+            "Location": "Used in redirection, or when a new resource has been created",
+            "P3P": "This field is supposed to set P3P policy",
+            "Pragma": "Implementation-specific fields",
+            "Preference-Applied": "Indicates which Prefer tokens were honored",
+            "Proxy-Authenticate": "Request authentication to access the proxy",
+            "Public-Key-Pins": "HTTP Public Key Pinning",
+            "Retry-After": "If an entity is temporarily unavailable",
+            "Server": "A name for the server",
+            "Set-Cookie": "An HTTP cookie",
+            "Strict-Transport-Security": "A HSTS Policy",
+            "Trailer": "Indicates header fields present in the trailer",
+            "Transfer-Encoding": "The form of encoding used to transfer the entity",
+            "Tk": "Tracking Status header",
+            "Upgrade": "Ask the client to upgrade to another protocol",
+            "Vary": "Tells downstream proxies how to match future request headers",
+            "Via": "Informs the client of proxies through which the response was sent",
+            "Warning": "A general warning about possible problems",
+            "WWW-Authenticate": "Indicates the authentication scheme to be used",
+            "X-Frame-Options": "Clickjacking protection"
+        }
 
     def is_jwt(self, token):
         # Split the token into parts
@@ -2656,6 +2756,74 @@ Attack Details:
         # Add search button
         search_button = ttk.Button(input_frame, text="Search", command=search)
         search_button.pack(side=tk.LEFT, padx=5)
+
+    def analyze_headers(self):
+        # Create a new window for headers analysis
+        headers_window = tk.Toplevel(self.root)
+        headers_window.title("Header Analysis")
+        headers_window.geometry("800x600")
+        
+        # Create main frame
+        main_frame = ttk.Frame(headers_window)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Create text area for results
+        results_text = tk.Text(main_frame, wrap=tk.WORD)
+        results_text.pack(fill=tk.BOTH, expand=True)
+        
+        # Add scrollbar
+        scrollbar = ttk.Scrollbar(results_text)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        results_text.config(yscrollcommand=scrollbar.set)
+        scrollbar.config(command=results_text.yview)
+        
+        # Get request text
+        request_text = self.request_text.get("1.0", tk.END).strip()
+        
+        if not request_text:
+            results_text.insert(tk.END, "No request headers to analyze.\n")
+        else:
+            # Parse request headers
+            request_lines = request_text.split('\n')
+            results_text.insert(tk.END, "Request Headers:\n")
+            results_text.insert(tk.END, "----------------\n")
+            
+            for line in request_lines[1:]:  # Skip the first line (request line)
+                if ':' in line:
+                    header, value = line.split(':', 1)
+                    header = header.strip()
+                    value = value.strip()
+                    
+                    if header in self.header_info:
+                        results_text.insert(tk.END, f"{header}: {value}\n")
+                        results_text.insert(tk.END, f"Description: {self.header_info[header]}\n\n")
+                    else:
+                        results_text.insert(tk.END, f"{header}: {value}\n")
+                        results_text.insert(tk.END, "Description: Custom header\n\n")
+        
+        # Get response text if available
+        response_text = self.response_text.get("1.0", tk.END).strip()
+        
+        if response_text:
+            # Parse response headers
+            response_lines = response_text.split('\n')
+            results_text.insert(tk.END, "\nResponse Headers:\n")
+            results_text.insert(tk.END, "-----------------\n")
+            
+            for line in response_lines:
+                if ':' in line:
+                    header, value = line.split(':', 1)
+                    header = header.strip()
+                    value = value.strip()
+                    
+                    if header in self.header_info:
+                        results_text.insert(tk.END, f"{header}: {value}\n")
+                        results_text.insert(tk.END, f"Description: {self.header_info[header]}\n\n")
+                    else:
+                        results_text.insert(tk.END, f"{header}: {value}\n")
+                        results_text.insert(tk.END, "Description: Custom header\n\n")
+        else:
+            results_text.insert(tk.END, "\nNo response headers to analyze.\n")
 
 def main():
     root = tk.Tk()
