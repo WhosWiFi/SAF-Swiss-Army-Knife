@@ -2964,8 +2964,8 @@ Attack Details:
                                 summary_text.insert(tk.END, "• Missing SameSite attribute - Vulnerable to CSRF\n", "warning")
                         summary_text.insert(tk.END, "\n", "warning")
                     
-                    # Add detailed overall security assessment
-                    summary_text.insert(tk.END, "Overall Security Assessment:\n", "header")
+                    # Add detailed overall security assessment with attack suggestions
+                    summary_text.insert(tk.END, "Penetration Testing Opportunities:\n", "header")
                     
                     if not missing_headers and not ('Server' in response.headers or 'X-Powered-By' in response.headers):
                         summary_text.insert(tk.END, "✅ Strong Security Configuration\n", "success")
@@ -2973,20 +2973,55 @@ Attack Details:
                         summary_text.insert(tk.END, "• No server information disclosure\n", "success")
                         if 'Set-Cookie' in response.headers:
                             summary_text.insert(tk.END, "• Cookie security needs review\n", "warning")
-                    elif len(missing_headers) <= 2:
-                        summary_text.insert(tk.END, "⚠️ Moderate Security Configuration\n", "warning")
-                        summary_text.insert(tk.END, f"• {len(missing_headers)} security headers are missing\n", "warning")
-                        if 'Server' in response.headers or 'X-Powered-By' in response.headers:
-                            summary_text.insert(tk.END, "• Server information is being disclosed\n", "warning")
-                        if 'Set-Cookie' in response.headers:
-                            summary_text.insert(tk.END, "• Cookie security needs improvement\n", "warning")
                     else:
-                        summary_text.insert(tk.END, "❌ Weak Security Configuration\n", "error")
-                        summary_text.insert(tk.END, f"• {len(missing_headers)} critical security headers are missing\n", "error")
-                        if 'Server' in response.headers or 'X-Powered-By' in response.headers:
-                            summary_text.insert(tk.END, "• Server information is being disclosed\n", "error")
+                        summary_text.insert(tk.END, "⚠️ Potential Attack Vectors:\n", "warning")
+                        
+                        # Check for specific missing headers and suggest attacks
+                        if 'X-Frame-Options' in missing_headers:
+                            summary_text.insert(tk.END, "• Clickjacking Attack:\n", "error")
+                            summary_text.insert(tk.END, "  - Create a malicious page with an iframe targeting this endpoint\n", "error")
+                            summary_text.insert(tk.END, "  - Use CSS to make the iframe transparent and position it over a fake login form\n", "error")
+                            summary_text.insert(tk.END, "  - Test with different frame-busting techniques\n\n", "error")
+                        
+                        if 'Content-Security-Policy' in missing_headers:
+                            summary_text.insert(tk.END, "• XSS Attack:\n", "error")
+                            summary_text.insert(tk.END, "  - Test with basic XSS payloads: <script>alert(1)</script>\n", "error")
+                            summary_text.insert(tk.END, "  - Try DOM-based XSS: <img src=x onerror=alert(1)>\n", "error")
+                            summary_text.insert(tk.END, "  - Test with event handlers: onmouseover=alert(1)\n\n", "error")
+                        
+                        if 'Strict-Transport-Security' in missing_headers:
+                            summary_text.insert(tk.END, "• SSL Stripping Attack:\n", "error")
+                            summary_text.insert(tk.END, "  - Attempt to downgrade HTTPS to HTTP\n", "error")
+                            summary_text.insert(tk.END, "  - Test with tools like sslstrip\n", "error")
+                            summary_text.insert(tk.END, "  - Check for mixed content vulnerabilities\n\n", "error")
+                        
+                        if 'X-Content-Type-Options' in missing_headers:
+                            summary_text.insert(tk.END, "• MIME Type Sniffing Attack:\n", "error")
+                            summary_text.insert(tk.END, "  - Upload files with incorrect MIME types\n", "error")
+                            summary_text.insert(tk.END, "  - Test with HTML files uploaded as images\n", "error")
+                            summary_text.insert(tk.END, "  - Check for XSS via file upload\n\n", "error")
+                        
                         if 'Set-Cookie' in response.headers:
-                            summary_text.insert(tk.END, "• Cookie security is insufficient\n", "error")
+                            cookies = response.headers['Set-Cookie'].split(';')
+                            for cookie in cookies:
+                                cookie = cookie.strip()
+                                if 'HttpOnly' not in cookie:
+                                    summary_text.insert(tk.END, "• Cookie Theft via XSS:\n", "error")
+                                    summary_text.insert(tk.END, "  - If XSS is found, cookies can be stolen\n", "error")
+                                    summary_text.insert(tk.END, "  - Test with document.cookie access\n", "error")
+                                    summary_text.insert(tk.END, "  - Check for session hijacking possibilities\n\n", "error")
+                                
+                                if 'SameSite' not in cookie:
+                                    summary_text.insert(tk.END, "• CSRF Attack:\n", "error")
+                                    summary_text.insert(tk.END, "  - Create a malicious form that submits to this endpoint\n", "error")
+                                    summary_text.insert(tk.END, "  - Test with different HTTP methods\n", "error")
+                                    summary_text.insert(tk.END, "  - Check for state-changing operations\n\n", "error")
+                        
+                        if 'Server' in response.headers or 'X-Powered-By' in response.headers:
+                            summary_text.insert(tk.END, "• Version-Specific Exploits:\n", "error")
+                            summary_text.insert(tk.END, "  - Research known vulnerabilities for the server version\n", "error")
+                            summary_text.insert(tk.END, "  - Check for default credentials\n", "error")
+                            summary_text.insert(tk.END, "  - Look for version-specific misconfigurations\n\n", "error")
                     
                     # Make summary text read-only
                     summary_text.config(state='disabled')
