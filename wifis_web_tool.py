@@ -2767,63 +2767,111 @@ Attack Details:
         main_frame = ttk.Frame(headers_window)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        # Create text area for results
-        results_text = tk.Text(main_frame, wrap=tk.WORD)
-        results_text.pack(fill=tk.BOTH, expand=True)
+        # Create notebook for tabs
+        notebook = ttk.Notebook(main_frame)
+        notebook.pack(fill=tk.BOTH, expand=True)
         
-        # Add scrollbar
-        scrollbar = ttk.Scrollbar(results_text)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        results_text.config(yscrollcommand=scrollbar.set)
-        scrollbar.config(command=results_text.yview)
+        # Request Headers Tab
+        request_frame = ttk.Frame(notebook)
+        notebook.add(request_frame, text="Request Headers")
+        
+        # Response Headers Tab
+        response_frame = ttk.Frame(notebook)
+        notebook.add(response_frame, text="Response Headers")
         
         # Get request text
         request_text = self.request_text.get("1.0", tk.END).strip()
         
         if not request_text:
-            results_text.insert(tk.END, "No request headers to analyze.\n")
+            # Create empty tree for request headers
+            request_tree = ttk.Treeview(request_frame, columns=("Value", "Description"), show="tree")
+            request_tree.heading("#0", text="Header")
+            request_tree.heading("Value", text="Value")
+            request_tree.heading("Description", text="Description")
+            request_tree.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+            
+            # Add scrollbar
+            scrollbar = ttk.Scrollbar(request_tree)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            request_tree.config(yscrollcommand=scrollbar.set)
+            scrollbar.config(command=request_tree.yview)
+            
+            request_tree.insert("", tk.END, text="No Headers", values=("", "No request headers to analyze"))
         else:
             # Parse request headers
+            request_headers = {}
             request_lines = request_text.split('\n')
-            results_text.insert(tk.END, "Request Headers:\n")
-            results_text.insert(tk.END, "----------------\n")
-            
-            for line in request_lines[1:]:  # Skip the first line (request line)
+            for line in request_lines[1:]:  # Skip first line (method and path)
                 if ':' in line:
-                    header, value = line.split(':', 1)
-                    header = header.strip()
-                    value = value.strip()
-                    
-                    if header in self.header_info:
-                        results_text.insert(tk.END, f"{header}: {value}\n")
-                        results_text.insert(tk.END, f"Description: {self.header_info[header]}\n\n")
-                    else:
-                        results_text.insert(tk.END, f"{header}: {value}\n")
-                        results_text.insert(tk.END, "Description: Custom header\n\n")
+                    key, value = line.split(':', 1)
+                    request_headers[key.strip()] = value.strip()
+            
+            # Create tree for request headers
+            request_tree = ttk.Treeview(request_frame, columns=("Value", "Description"), show="tree")
+            request_tree.heading("#0", text="Header")
+            request_tree.heading("Value", text="Value")
+            request_tree.heading("Description", text="Description")
+            request_tree.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+            
+            # Add scrollbar
+            scrollbar = ttk.Scrollbar(request_tree)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            request_tree.config(yscrollcommand=scrollbar.set)
+            scrollbar.config(command=request_tree.yview)
+            
+            # Add request headers to tree
+            for header, value in request_headers.items():
+                header_item = request_tree.insert("", tk.END, text=header)
+                request_tree.insert(header_item, tk.END, text="Value", values=(value, ""))
+                description = self.header_info.get(header, "Custom header")
+                request_tree.insert(header_item, tk.END, text="Description", values=("", description))
         
-        # Get response text if available
+        # Get response text
         response_text = self.response_text.get("1.0", tk.END).strip()
         
-        if response_text:
-            # Parse response headers
-            response_lines = response_text.split('\n')
-            results_text.insert(tk.END, "\nResponse Headers:\n")
-            results_text.insert(tk.END, "-----------------\n")
+        if not response_text:
+            # Create empty tree for response headers
+            response_tree = ttk.Treeview(response_frame, columns=("Value", "Description"), show="tree")
+            response_tree.heading("#0", text="Header")
+            response_tree.heading("Value", text="Value")
+            response_tree.heading("Description", text="Description")
+            response_tree.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
             
+            # Add scrollbar
+            scrollbar = ttk.Scrollbar(response_tree)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            response_tree.config(yscrollcommand=scrollbar.set)
+            scrollbar.config(command=response_tree.yview)
+            
+            response_tree.insert("", tk.END, text="No Headers", values=("", "No response headers to analyze"))
+        else:
+            # Parse response headers
+            response_headers = {}
+            response_lines = response_text.split('\n')
             for line in response_lines:
                 if ':' in line:
-                    header, value = line.split(':', 1)
-                    header = header.strip()
-                    value = value.strip()
-                    
-                    if header in self.header_info:
-                        results_text.insert(tk.END, f"{header}: {value}\n")
-                        results_text.insert(tk.END, f"Description: {self.header_info[header]}\n\n")
-                    else:
-                        results_text.insert(tk.END, f"{header}: {value}\n")
-                        results_text.insert(tk.END, "Description: Custom header\n\n")
-        else:
-            results_text.insert(tk.END, "\nNo response headers to analyze.\n")
+                    key, value = line.split(':', 1)
+                    response_headers[key.strip()] = value.strip()
+            
+            # Create tree for response headers
+            response_tree = ttk.Treeview(response_frame, columns=("Value", "Description"), show="tree")
+            response_tree.heading("#0", text="Header")
+            response_tree.heading("Value", text="Value")
+            response_tree.heading("Description", text="Description")
+            response_tree.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+            
+            # Add scrollbar
+            scrollbar = ttk.Scrollbar(response_tree)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            response_tree.config(yscrollcommand=scrollbar.set)
+            scrollbar.config(command=response_tree.yview)
+            
+            # Add response headers to tree
+            for header, value in response_headers.items():
+                header_item = response_tree.insert("", tk.END, text=header)
+                response_tree.insert(header_item, tk.END, text="Value", values=(value, ""))
+                description = self.header_info.get(header, "Custom header")
+                response_tree.insert(header_item, tk.END, text="Description", values=("", description))
 
 def main():
     root = tk.Tk()
