@@ -551,7 +551,7 @@ class HTTPRequestTool:
                 testssl_window.title(f"TestSSL Results - {domain}")
                 testssl_window.geometry("800x600")
                 
-                # Create a text widget for output with custom tags for colors
+                # Create a text widget for output
                 output_text = tk.Text(testssl_window, wrap=tk.WORD, font=('Courier', 10))
                 output_text.pack(fill=tk.BOTH, expand=True)
                 
@@ -561,91 +561,13 @@ class HTTPRequestTool:
                 output_text.config(yscrollcommand=scrollbar.set)
                 scrollbar.config(command=output_text.yview)
                 
-                # Configure text colors
-                output_text.tag_configure('bold', font=('Courier', 10, 'bold'))
-                output_text.tag_configure('green', foreground='green')
-                output_text.tag_configure('yellow', foreground='yellow')
-                output_text.tag_configure('red', foreground='red')
-                output_text.tag_configure('blue', foreground='blue')
-                output_text.tag_configure('magenta', foreground='magenta')
-                output_text.tag_configure('italic', font=('Courier', 10, 'italic'))
-                
                 # Add initial message
                 output_text.insert(tk.END, f"Starting TestSSL scan for {domain}...\n\n")
                 
-                def process_ansi(line):
-                    # Remove any remaining [m characters
-                    line = line.replace('\033[m', '')
-                    
-                    # ANSI color code mapping
-                    ansi_colors = {
-                        '\033[0;32m': ('green', True),
-                        '\033[1;32m': ('green', True),
-                        '\033[0;33m': ('yellow', True),
-                        '\033[1;33m': ('yellow', True),
-                        '\033[0;31m': ('red', True),
-                        '\033[1;31m': ('red', True),
-                        '\033[0;34m': ('blue', True),
-                        '\033[1;34m': ('blue', True),
-                        '\033[0;35m': ('magenta', True),
-                        '\033[1;35m': ('magenta', True),
-                        '\033[1m': ('bold', True),
-                        '\033[3m': ('italic', True),
-                        '\033[0m': ('', False)  # Reset all formatting
-                    }
-                    
-                    # Replace ANSI codes with text widget tags
-                    for code, (tag, is_opening) in ansi_colors.items():
-                        if is_opening:
-                            line = line.replace(code, f'<{tag}>')
-                        else:
-                            line = line.replace(code, f'</{tag}>' if tag else '</>')
-                    
-                    # Split the line into segments based on tags
-                    segments = []
-                    current_text = ""
-                    current_tags = set()
-                    
-                    i = 0
-                    while i < len(line):
-                        if line[i:i+2] == '<>':
-                            # Found a tag
-                            tag_end = line.find('>', i+2)
-                            if tag_end != -1:
-                                tag = line[i+2:tag_end]
-                                if tag.startswith('/'):
-                                    # Closing tag
-                                    tag = tag[1:]
-                                    if tag in current_tags:
-                                        if current_text:
-                                            segments.append((current_text, set(current_tags)))
-                                            current_text = ""
-                                        current_tags.remove(tag)
-                                else:
-                                    # Opening tag
-                                    if current_text:
-                                        segments.append((current_text, set(current_tags)))
-                                        current_text = ""
-                                    current_tags.add(tag)
-                                i = tag_end + 1
-                            else:
-                                current_text += line[i]
-                                i += 1
-                        else:
-                            current_text += line[i]
-                            i += 1
-                    
-                    if current_text:
-                        segments.append((current_text, set(current_tags)))
-                    
-                    return segments
-                
-                def insert_with_tags(text_widget, segments):
-                    for text, tags in segments:
-                        if not tags:
-                            text_widget.insert(tk.END, text)
-                        else:
-                            text_widget.insert(tk.END, text, tuple(tags))
+                def process_line(line):
+                    # Remove any ANSI codes
+                    line = re.sub(r'\033\[[0-9;]*m', '', line)
+                    output_text.insert(tk.END, line + '\n')
                 
                 def run_testssl_thread():
                     try:
@@ -674,9 +596,8 @@ class HTTPRequestTool:
                             if output == '' and process.poll() is not None:
                                 break
                             if output:
-                                # Process ANSI codes and update the text widget
-                                segments = process_ansi(output)
-                                self.root.after(0, lambda: insert_with_tags(output_text, segments))
+                                # Process and display the line
+                                self.root.after(0, lambda line=output: process_line(line))
                                 self.root.after(0, lambda: output_text.see(tk.END))
                         
                         # Get any remaining output
@@ -687,11 +608,12 @@ class HTTPRequestTool:
                         
                         # Update the text widget with any remaining output
                         if stdout:
-                            segments = process_ansi(stdout)
-                            self.root.after(0, lambda: insert_with_tags(output_text, segments))
+                            for line in stdout.splitlines():
+                                self.root.after(0, lambda line=line: process_line(line))
                         if stderr:
-                            segments = process_ansi(stderr)
-                            self.root.after(0, lambda: insert_with_tags(output_text, [("\n\nErrors:\n", set())] + segments))
+                            output_text.insert(tk.END, "\n\nErrors:\n")
+                            for line in stderr.splitlines():
+                                self.root.after(0, lambda line=line: process_line(line))
                         
                         # Show completion message
                         self.root.after(0, lambda: messagebox.showinfo("TestSSL", f"TestSSL scan completed for {domain}"))
