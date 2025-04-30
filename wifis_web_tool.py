@@ -23,13 +23,24 @@ class HTTPRequestTool:
         # Initialize UI elements first
         self.setup_ui()
         
+        # Now set the UI elements in JWTAttacks class
+        self.jwt_attacks.set_ui_elements(
+            self.request_text,
+            self.jwt_text,
+            self.minimize_jwt,
+            self.use_secret,
+            self.secret_entry
+        )
+        
         # Now set the UI elements in Tools class
         self.tools.set_ui_elements(
             self.request_text,
             self.response_text,
             self.use_proxy,
             self.proxy_address,
-            self.verify_cert
+            self.verify_cert,
+            self.request_headers,
+            self.response_headers
         )
         
     def setup_ui(self):
@@ -281,6 +292,19 @@ class HTTPRequestTool:
 class JWTAttacks:
     def __init__(self, root):
         self.root = root
+        self.request_text = None
+        self.jwt_text = None
+        self.minimize_jwt = None
+        self.use_secret = None
+        self.secret_entry = None
+    
+    def set_ui_elements(self, request_text, jwt_text, minimize_jwt, use_secret, secret_entry):
+        self.request_text = request_text
+        self.jwt_text = jwt_text
+        self.minimize_jwt = minimize_jwt
+        self.use_secret = use_secret
+        self.secret_entry = secret_entry
+
     def is_jwt(self, token):
         # Split the token into parts
         parts = token.split('.')
@@ -1423,6 +1447,8 @@ class Tools:
         self.use_proxy = None
         self.proxy_address = None
         self.verify_cert = None
+        self.request_headers = None
+        self.response_headers = None
         
         # Load common files from common_files.txt
         try:
@@ -1432,12 +1458,14 @@ class Tools:
             messagebox.showerror("Error", f"Failed to load common files: {str(e)}")
             self.common_files = []
     
-    def set_ui_elements(self, request_text, response_text, use_proxy, proxy_address, verify_cert):
+    def set_ui_elements(self, request_text, response_text, use_proxy, proxy_address, verify_cert, request_headers, response_headers):
         self.request_text = request_text
         self.response_text = response_text
         self.use_proxy = use_proxy
         self.proxy_address = proxy_address
         self.verify_cert = verify_cert
+        self.request_headers = request_headers
+        self.response_headers = response_headers
 
     def generate_clickjack(self):
         url = simpledialog.askstring("Generate Clickjack", "Enter target URL:")
