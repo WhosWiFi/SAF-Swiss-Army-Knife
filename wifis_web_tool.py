@@ -1675,28 +1675,46 @@ Attack Details:
                     
                     # Save found files to a report
                     if found_files:
-                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        report_file = f"common_files_report_{timestamp}.txt"
-                        with open(report_file, 'w') as f:
-                            f.write("=== Common Files Check Report ===\n\n")
-                            f.write(f"Base URL: {base_url}\n")
-                            f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-                            f.write("Found files:\n")
-                            for file_path, url, response in found_files:
-                                f.write(f"\nFile: {file_path}\n")
-                                f.write(f"URL: {url}\n")
-                                f.write(f"Response length: {len(response.text)} bytes\n")
-                                f.write("Response headers:\n")
-                                for key, value in response.headers.items():
-                                    f.write(f"  {key}: {value}\n")
-                                f.write("\nResponse content (first 1000 chars):\n")
-                                f.write(response.text[:1000])
-                                f.write("\n" + "="*50 + "\n")
-                        
-                        messagebox.showinfo("Report Saved", f"Report saved to {report_file}")
+                        try:
+                            # Create reports directory if it doesn't exist
+                            reports_dir = os.path.join(os.getcwd(), "reports")
+                            if not os.path.exists(reports_dir):
+                                os.makedirs(reports_dir)
+                            
+                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            report_file = os.path.join(reports_dir, f"common_files_report_{timestamp}.txt")
+                            
+                            with open(report_file, 'w', encoding='utf-8') as f:
+                                f.write("=== Common Files Check Report ===\n\n")
+                                f.write(f"Base URL: {base_url}\n")
+                                f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+                                f.write("Found files:\n")
+                                for file_path, url, response in found_files:
+                                    f.write(f"\nFile: {file_path}\n")
+                                    f.write(f"URL: {url}\n")
+                                    f.write(f"Response length: {len(response.text)} bytes\n")
+                                    f.write("Response headers:\n")
+                                    for key, value in response.headers.items():
+                                        f.write(f"  {key}: {value}\n")
+                                    f.write("\nResponse content (first 1000 chars):\n")
+                                    f.write(response.text[:1000])
+                                    f.write("\n" + "="*50 + "\n")
+                            
+                            # Show messagebox and then bring results window back to front
+                            messagebox.showinfo("Report Saved", f"Report saved to {report_file}")
+                            results_window.lift()
+                            results_window.focus_force()
+                            
+                        except Exception as e:
+                            messagebox.showerror("Error", f"Failed to save report: {str(e)}")
+                            results_window.lift()
+                            results_window.focus_force()
                 
                 except Exception as e:
                     results_text.insert(tk.END, f"\nError: {str(e)}\n", "error")
+                    # Keep results window in foreground even if there's an error
+                    results_window.lift()
+                    results_window.focus_force()
             
             # Run the check in a separate thread
             import threading
