@@ -546,37 +546,167 @@ class HTTPRequestTool:
         domain = simpledialog.askstring("TestSSL", "Enter domain to test:")
         if domain:
             try:
-                # Store current directory
-                current_dir = os.getcwd()
+                # Create a new window for testssl output
+                testssl_window = tk.Toplevel(self.root)
+                testssl_window.title(f"TestSSL Results - {domain}")
+                testssl_window.geometry("800x600")
                 
-                # Change to testssl directory
-                os.chdir('testssl')
+                # Create a text widget for output with custom tags for colors
+                output_text = tk.Text(testssl_window, wrap=tk.WORD, font=('Courier', 10))
+                output_text.pack(fill=tk.BOTH, expand=True)
                 
-                # Make sure testssl.sh is executable
-                os.chmod('testssl.sh', 0o755)
+                # Create a scrollbar
+                scrollbar = tk.Scrollbar(output_text)
+                scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+                output_text.config(yscrollcommand=scrollbar.set)
+                scrollbar.config(command=output_text.yview)
                 
-                # Run testssl.sh with HTML output using system OpenSSL
-                result = subprocess.run(
-                    ['./testssl.sh', '--html', domain],
-                    capture_output=True,
-                    text=True
-                )
+                # Configure text colors
+                output_text.tag_configure('bold', font=('Courier', 10, 'bold'))
+                output_text.tag_configure('green', foreground='green')
+                output_text.tag_configure('yellow', foreground='yellow')
+                output_text.tag_configure('red', foreground='red')
+                output_text.tag_configure('blue', foreground='blue')
+                output_text.tag_configure('magenta', foreground='magenta')
+                output_text.tag_configure('italic', font=('Courier', 10, 'italic'))
                 
-                # Change back to original directory
-                os.chdir(current_dir)
+                # Add initial message
+                output_text.insert(tk.END, f"Starting TestSSL scan for {domain}...\n\n")
                 
-                # Display the output in the response text area
-                self.response_text.delete("1.0", tk.END)
-                self.response_text.insert("1.0", f"TestSSL Results for {domain}:\n\n{result.stdout}")
+                def process_ansi(line):
+                    # Remove any remaining [m characters
+                    line = line.replace('\033[m', '')
+                    
+                    # ANSI color code mapping
+                    ansi_colors = {
+                        '\033[0;32m': ('green', True),
+                        '\033[1;32m': ('green', True),
+                        '\033[0;33m': ('yellow', True),
+                        '\033[1;33m': ('yellow', True),
+                        '\033[0;31m': ('red', True),
+                        '\033[1;31m': ('red', True),
+                        '\033[0;34m': ('blue', True),
+                        '\033[1;34m': ('blue', True),
+                        '\033[0;35m': ('magenta', True),
+                        '\033[1;35m': ('magenta', True),
+                        '\033[1m': ('bold', True),
+                        '\033[3m': ('italic', True),
+                        '\033[0m': ('', False)  # Reset all formatting
+                    }
+                    
+                    # Replace ANSI codes with text widget tags
+                    for code, (tag, is_opening) in ansi_colors.items():
+                        if is_opening:
+                            line = line.replace(code, f'<{tag}>')
+                        else:
+                            line = line.replace(code, f'</{tag}>' if tag else '</>')
+                    
+                    # Split the line into segments based on tags
+                    segments = []
+                    current_text = ""
+                    current_tags = set()
+                    
+                    i = 0
+                    while i < len(line):
+                        if line[i:i+2] == '<>':
+                            # Found a tag
+                            tag_end = line.find('>', i+2)
+                            if tag_end != -1:
+                                tag = line[i+2:tag_end]
+                                if tag.startswith('/'):
+                                    # Closing tag
+                                    tag = tag[1:]
+                                    if tag in current_tags:
+                                        if current_text:
+                                            segments.append((current_text, set(current_tags)))
+                                            current_text = ""
+                                        current_tags.remove(tag)
+                                else:
+                                    # Opening tag
+                                    if current_text:
+                                        segments.append((current_text, set(current_tags)))
+                                        current_text = ""
+                                    current_tags.add(tag)
+                                i = tag_end + 1
+                            else:
+                                current_text += line[i]
+                                i += 1
+                        else:
+                            current_text += line[i]
+                            i += 1
+                    
+                    if current_text:
+                        segments.append((current_text, set(current_tags)))
+                    
+                    return segments
                 
-                if result.stderr:
-                    self.response_text.insert(tk.END, f"\n\nErrors:\n{result.stderr}")
+                def insert_with_tags(text_widget, segments):
+                    for text, tags in segments:
+                        if not tags:
+                            text_widget.insert(tk.END, text)
+                        else:
+                            text_widget.insert(tk.END, text, tuple(tags))
                 
-                messagebox.showinfo("TestSSL", f"TestSSL scan completed for {domain}")
+                def run_testssl_thread():
+                    try:
+                        # Store current directory
+                        current_dir = os.getcwd()
+                        
+                        # Change to testssl directory
+                        os.chdir('testssl')
+                        
+                        # Make sure testssl.sh is executable
+                        os.chmod('testssl.sh', 0o755)
+                        
+                        # Run testssl.sh with HTML output using system OpenSSL
+                        process = subprocess.Popen(
+                            ['./testssl.sh', '--html', domain],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            text=True,
+                            bufsize=1,
+                            universal_newlines=True
+                        )
+                        
+                        # Read output in real-time
+                        while True:
+                            output = process.stdout.readline()
+                            if output == '' and process.poll() is not None:
+                                break
+                            if output:
+                                # Process ANSI codes and update the text widget
+                                segments = process_ansi(output)
+                                self.root.after(0, lambda: insert_with_tags(output_text, segments))
+                                self.root.after(0, lambda: output_text.see(tk.END))
+                        
+                        # Get any remaining output
+                        stdout, stderr = process.communicate()
+                        
+                        # Change back to original directory
+                        os.chdir(current_dir)
+                        
+                        # Update the text widget with any remaining output
+                        if stdout:
+                            segments = process_ansi(stdout)
+                            self.root.after(0, lambda: insert_with_tags(output_text, segments))
+                        if stderr:
+                            segments = process_ansi(stderr)
+                            self.root.after(0, lambda: insert_with_tags(output_text, [("\n\nErrors:\n", set())] + segments))
+                        
+                        # Show completion message
+                        self.root.after(0, lambda: messagebox.showinfo("TestSSL", f"TestSSL scan completed for {domain}"))
+                        
+                    except Exception as e:
+                        # Make sure we change back to original directory even if there's an error
+                        os.chdir(current_dir)
+                        self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to run TestSSL: {str(e)}"))
+                
+                # Start the testssl process in a separate thread
+                import threading
+                threading.Thread(target=run_testssl_thread, daemon=True).start()
+                
             except Exception as e:
-                # Make sure we change back to original directory even if there's an error
-                os.chdir(current_dir)
-                messagebox.showerror("Error", f"Failed to run TestSSL: {str(e)}")
+                messagebox.showerror("Error", f"Failed to start TestSSL: {str(e)}")
 
     def toggle_jwt_section(self):
         if self.minimize_jwt.get():
