@@ -2605,7 +2605,7 @@ Attack Details:
                     
                     # Configure session with retries and longer timeout
                     session = requests.Session()
-                    retry = requests.adapters.HTTPAdapter(max_retries=3, backoff_factor=1)
+                    retry = requests.adapters.HTTPAdapter(max_retries=3)
                     session.mount('https://', retry)
                     session.mount('http://', retry)
                     
