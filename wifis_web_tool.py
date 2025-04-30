@@ -19,6 +19,20 @@ class HTTPRequestTool:
         self.root = root
         self.jwt_attacks = JWTAttacks(self.root)
         self.tools = Tools(self.root)
+        
+        # Initialize UI elements first
+        self.setup_ui()
+        
+        # Now set the UI elements in Tools class
+        self.tools.set_ui_elements(
+            self.request_text,
+            self.response_text,
+            self.use_proxy,
+            self.proxy_address,
+            self.verify_cert
+        )
+        
+    def setup_ui(self):
         self.root.title("HTTP Request Tool")
         self.root.geometry("1200x800")
         
@@ -33,19 +47,11 @@ class HTTPRequestTool:
             self.request_headers = {}
             self.response_headers = {}
         
-        # Load common files from common_files.txt
-        try:
-            with open('common_files.txt', 'r') as f:
-                self.common_files = [line.strip() for line in f if line.strip()]
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to load common files: {str(e)}")
-            self.common_files = []
-        
         # Set minimum window size
         self.root.minsize(1200, 800)
         
         # Create main paned window
-        self.paned = ttk.PanedWindow(root, orient=tk.HORIZONTAL)
+        self.paned = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
         self.paned.pack(fill=tk.BOTH, expand=True)
         
         # Left frame for request
@@ -165,7 +171,7 @@ class HTTPRequestTool:
         self.verify_cert = tk.BooleanVar(value=False)
         self.cert_check = ttk.Checkbutton(proxy_frame, text="Verify Proxy Cert", variable=self.verify_cert)
         self.cert_check.pack(side=tk.LEFT, padx=5)
-
+        
         # Add Wayback Machine button
         self.wayback_button = ttk.Button(button_frame, text="Wayback Machine", command=self.tools.search_wayback_machine)
         self.wayback_button.pack(side=tk.LEFT, padx=5)
@@ -1408,9 +1414,30 @@ Attack Details:
         except Exception as e:
             messagebox.showerror("Error", f"Failed to parse JWT: {str(e)}")
             return
+
 class Tools:
     def __init__(self, root):
         self.root = root
+        self.request_text = None
+        self.response_text = None
+        self.use_proxy = None
+        self.proxy_address = None
+        self.verify_cert = None
+        
+        # Load common files from common_files.txt
+        try:
+            with open('common_files.txt', 'r') as f:
+                self.common_files = [line.strip() for line in f if line.strip()]
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load common files: {str(e)}")
+            self.common_files = []
+    
+    def set_ui_elements(self, request_text, response_text, use_proxy, proxy_address, verify_cert):
+        self.request_text = request_text
+        self.response_text = response_text
+        self.use_proxy = use_proxy
+        self.proxy_address = proxy_address
+        self.verify_cert = verify_cert
 
     def generate_clickjack(self):
         url = simpledialog.askstring("Generate Clickjack", "Enter target URL:")
