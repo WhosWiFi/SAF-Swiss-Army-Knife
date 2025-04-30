@@ -31,6 +31,14 @@ class HTTPRequestTool:
             self.request_headers = {}
             self.response_headers = {}
         
+        # Load common files from common_files.txt
+        try:
+            with open('common_files.txt', 'r') as f:
+                self.common_files = [line.strip() for line in f if line.strip()]
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load common files: {str(e)}")
+            self.common_files = []
+        
         # Set minimum window size
         self.root.minsize(1200, 800)
         
@@ -1570,417 +1578,6 @@ Attack Details:
             parsed_url = urlparse(full_url)
             base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
             
-            # List of common sensitive files to check
-            sensitive_files = [
-                # API Documentation and Swagger paths
-                '/api-docs',
-                '/api-docs.json',
-                '/api-docs.yaml',
-                '/api-docs.yml',
-                '/swagger',
-                '/swagger.json',
-                '/swagger.yaml',
-                '/swagger.yml',
-                '/swagger-ui',
-                '/swagger-ui.html',
-                '/swagger-ui/index.html',
-                '/swagger-resources',
-                '/swagger-resources/configuration/ui',
-                '/swagger-resources/configuration/security',
-                '/v2/api-docs',
-                '/v3/api-docs',
-                '/v1/api-docs',
-                '/v1/swagger.json',
-                '/v2/swagger.json',
-                '/v3/swagger.json',
-                '/api/swagger.json',
-                '/api/v1/swagger.json',
-                '/api/v2/swagger.json',
-                '/api/v3/swagger.json',
-                '/api/swagger.yaml',
-                '/api/v1/swagger.yaml',
-                '/api/v2/swagger.yaml',
-                '/api/v3/swagger.yaml',
-                '/api/swagger.yml',
-                '/api/v1/swagger.yml',
-                '/api/v2/swagger.yml',
-                '/api/v3/swagger.yml',
-                '/api/swagger',
-                '/api/v1/swagger',
-                '/api/v2/swagger',
-                '/api/v3/swagger',
-                '/api/swagger-ui',
-                '/api/v1/swagger-ui',
-                '/api/v2/swagger-ui',
-                '/api/v3/swagger-ui',
-                '/api/swagger-ui.html',
-                '/api/v1/swagger-ui.html',
-                '/api/v2/swagger-ui.html',
-                '/api/v3/swagger-ui.html',
-                '/api/swagger-resources',
-                '/api/v1/swagger-resources',
-                '/api/v2/swagger-resources',
-                '/api/v3/swagger-resources',
-                '/api/swagger-resources/configuration/ui',
-                '/api/v1/swagger-resources/configuration/ui',
-                '/api/v2/swagger-resources/configuration/ui',
-                '/api/v3/swagger-resources/configuration/ui',
-                '/api/swagger-resources/configuration/security',
-                '/api/v1/swagger-resources/configuration/security',
-                '/api/v2/swagger-resources/configuration/security',
-                '/api/v3/swagger-resources/configuration/security',
-                '/docs',
-                '/docs/api',
-                '/docs/api-docs',
-                '/docs/swagger',
-                '/docs/swagger-ui',
-                '/docs/swagger-ui.html',
-                '/documentation',
-                '/documentation/api',
-                '/documentation/api-docs',
-                '/documentation/swagger',
-                '/documentation/swagger-ui',
-                '/documentation/swagger-ui.html',
-                '/apidocs',
-                '/apidocs/api',
-                '/apidocs/api-docs',
-                '/apidocs/swagger',
-                '/apidocs/swagger-ui',
-                '/apidocs/swagger-ui.html',
-                '/api/documentation',
-                '/api/v1/documentation',
-                '/api/v2/documentation',
-                '/api/v3/documentation',
-                '/api/apidocs',
-                '/api/v1/apidocs',
-                '/api/v2/apidocs',
-                '/api/v3/apidocs',
-                '/api/docs',
-                '/api/v1/docs',
-                '/api/v2/docs',
-                '/api/v3/docs',
-                '/api/openapi.json',
-                '/api/v1/openapi.json',
-                '/api/v2/openapi.json',
-                '/api/v3/openapi.json',
-                '/api/openapi.yaml',
-                '/api/v1/openapi.yaml',
-                '/api/v2/openapi.yaml',
-                '/api/v3/openapi.yaml',
-                '/api/openapi.yml',
-                '/api/v1/openapi.yml',
-                '/api/v2/openapi.yml',
-                '/api/v3/openapi.yml',
-                '/openapi.json',
-                '/openapi.yaml',
-                '/openapi.yml',
-                '/api-specs',
-                '/api-specs/swagger.json',
-                '/api-specs/swagger.yaml',
-                '/api-specs/swagger.yml',
-                '/api-specs/openapi.json',
-                '/api-specs/openapi.yaml',
-                '/api-specs/openapi.yml',
-                '/api/spec',
-                '/api/v1/spec',
-                '/api/v2/spec',
-                '/api/v3/spec',
-                '/api/spec.json',
-                '/api/v1/spec.json',
-                '/api/v2/spec.json',
-                '/api/v3/spec.json',
-                '/api/spec.yaml',
-                '/api/v1/spec.yaml',
-                '/api/v2/spec.yaml',
-                '/api/v3/spec.yaml',
-                '/api/spec.yml',
-                '/api/v1/spec.yml',
-                '/api/v2/spec.yml',
-                '/api/v3/spec.yml',
-                '/spec',
-                '/spec.json',
-                '/spec.yaml',
-                '/spec.yml',
-                '/api/definition',
-                '/api/v1/definition',
-                '/api/v2/definition',
-                '/api/v3/definition',
-                '/api/definition.json',
-                '/api/v1/definition.json',
-                '/api/v2/definition.json',
-                '/api/v3/definition.json',
-                '/api/definition.yaml',
-                '/api/v1/definition.yaml',
-                '/api/v2/definition.yaml',
-                '/api/v3/definition.yaml',
-                '/api/definition.yml',
-                '/api/v1/definition.yml',
-                '/api/v2/definition.yml',
-                '/api/v3/definition.yml',
-                '/definition',
-                '/definition.json',
-                '/definition.yaml',
-                '/definition.yml',
-                
-                # JWT-related paths
-                '/.well-known/jwks.json',
-                '/.well-known/oauth-authorization-server',
-                '/.well-known/openid-configuration',
-                '/.well-known/jwks',
-                '/.well-known/oauth2-configuration',
-                '/.well-known/oauth2-authorization-server',
-                '/.well-known/oauth2-metadata',
-                '/.well-known/oauth2-provider',
-                '/.well-known/oauth2',
-                '/.well-known/openid',
-                '/jwks.json',
-                '/oauth2/jwks',
-                '/oauth2/keys',
-                '/oauth2/certs',
-                '/oauth2/.well-known/jwks.json',
-                '/oauth2/.well-known/openid-configuration',
-                '/openid/jwks',
-                '/openid/keys',
-                '/openid/certs',
-                '/openid/.well-known/jwks.json',
-                '/openid/.well-known/openid-configuration',
-                '/auth/jwks',
-                '/auth/keys',
-                '/auth/certs',
-                '/auth/.well-known/jwks.json',
-                '/auth/.well-known/openid-configuration',
-                '/api/jwks',
-                '/api/keys',
-                '/api/certs',
-                '/api/.well-known/jwks.json',
-                '/api/.well-known/openid-configuration',
-                '/identity/jwks',
-                '/identity/keys',
-                '/identity/certs',
-                '/identity/.well-known/jwks.json',
-                '/identity/.well-known/openid-configuration',
-                '/sso/jwks',
-                '/sso/keys',
-                '/sso/certs',
-                '/sso/.well-known/jwks.json',
-                '/sso/.well-known/openid-configuration',
-                '/login/jwks',
-                '/login/keys',
-                '/login/certs',
-                '/login/.well-known/jwks.json',
-                '/login/.well-known/openid-configuration',
-                '/token/jwks',
-                '/token/keys',
-                '/token/certs',
-                '/token/.well-known/jwks.json',
-                '/token/.well-known/openid-configuration',
-                '/keys',
-                '/certs',
-                '/certificates',
-                '/public-keys',
-                '/public-keys.json',
-                '/public-keys.pem',
-                '/public-keys.txt',
-                '/public-keys.xml',
-                '/public-keys.jwks',
-                '/public-keys.jwk',
-                '/public-keys.jwt',
-                '/public-keys.jws',
-                '/public-keys.jwe',
-                '/public-keys.jwa',
-                '/public-keys.jwk.json',
-                '/public-keys.jwt.json',
-                '/public-keys.jws.json',
-                '/public-keys.jwe.json',
-                '/public-keys.jwa.json',
-                '/public-keys.jwk.pem',
-                '/public-keys.jwt.pem',
-                '/public-keys.jws.pem',
-                '/public-keys.jwe.pem',
-                '/public-keys.jwa.pem',
-                '/public-keys.jwk.txt',
-                '/public-keys.jwt.txt',
-                '/public-keys.jws.txt',
-                '/public-keys.jwe.txt',
-                '/public-keys.jwa.txt',
-                '/public-keys.jwk.xml',
-                '/public-keys.jwt.xml',
-                '/public-keys.jws.xml',
-                '/public-keys.jwe.xml',
-                '/public-keys.jwa.xml',
-                '/public-keys.jwk.jwks',
-                '/public-keys.jwt.jwks',
-                '/public-keys.jws.jwks',
-                '/public-keys.jwe.jwks',
-                '/public-keys.jwa.jwks',
-                '/public-keys.jwk.jwk',
-                '/public-keys.jwt.jwk',
-                '/public-keys.jws.jwk',
-                '/public-keys.jwe.jwk',
-                '/public-keys.jwa.jwk',
-                '/public-keys.jwk.jwt',
-                '/public-keys.jwt.jwt',
-                '/public-keys.jws.jwt',
-                '/public-keys.jwe.jwt',
-                '/public-keys.jwa.jwt',
-                '/public-keys.jwk.jws',
-                '/public-keys.jwt.jws',
-                '/public-keys.jws.jws',
-                '/public-keys.jwe.jws',
-                '/public-keys.jwa.jws',
-                '/public-keys.jwk.jwe',
-                '/public-keys.jwt.jwe',
-                '/public-keys.jws.jwe',
-                '/public-keys.jwe.jwe',
-                '/public-keys.jwa.jwe',
-                '/public-keys.jwk.jwa',
-                '/public-keys.jwt.jwa',
-                '/public-keys.jws.jwa',
-                '/public-keys.jwe.jwa',
-                '/public-keys.jwa.jwa',
-                
-                # Configuration files
-                '/web.config',
-                '/web.conf',
-                '/config.php',
-                '/config.json',
-                '/.env',
-                '/.env.production',
-                '/.env.development',
-                '/.env.local',
-                '/.htaccess',
-                '/.htpasswd',
-                
-                # System files
-                '/etc/passwd',
-                '/etc/shadow',
-                '/etc/hosts',
-                '/etc/hostname',
-                '/etc/group',
-                '/etc/shadow-',
-                '/etc/passwd-',
-                
-                # Backup files
-                '/backup.zip',
-                '/backup.tar',
-                '/backup.tar.gz',
-                '/backup.sql',
-                '/database.sql',
-                '/dump.sql',
-                
-                # Version control
-                '/.git/config',
-                '/.git/HEAD',
-                '/.git/index',
-                '/.git/logs/HEAD',
-                '/.svn/entries',
-                '/.hg/store/00manifest.i',
-                
-                # Documentation
-                '/README.md',
-                '/README.txt',
-                '/CHANGELOG.md',
-                '/LICENSE',
-                
-                # API and metadata
-                '/.well-known/security.txt',
-                '/crossdomain.xml',
-                '/clientaccesspolicy.xml',
-                '/robots.txt',
-                '/sitemap.xml',
-                
-                # Log files
-                '/logs/error.log',
-                '/logs/access.log',
-                '/var/log/apache2/access.log',
-                '/var/log/apache2/error.log',
-                '/var/log/nginx/access.log',
-                '/var/log/nginx/error.log',
-                
-                # Database files
-                '/db.sqlite3',
-                '/database.sqlite',
-                '/app.db',
-                
-                # Temporary files
-                '/temp.txt',
-                '/tmp.txt',
-                '/test.txt',
-                
-                # Common backup patterns
-                '/backup/',
-                '/backups/',
-                '/old/',
-                '/archive/',
-                
-                # Common admin interfaces
-                '/admin/',
-                '/administrator/',
-                '/manager/',
-                '/phpmyadmin/',
-                '/adminer.php',
-                
-                # Common debug files
-                '/debug.log',
-                '/error.log',
-                '/phpinfo.php',
-                '/info.php',
-                
-                # Common sensitive directories
-                '/private/',
-                '/secret/',
-                '/confidential/',
-                '/secure/',
-                
-                # Common API documentation
-                '/api-docs/',
-                '/swagger/',
-                '/swagger-ui/',
-                '/api/v1/docs/',
-                
-                # Common development files
-                '/package.json',
-                '/composer.json',
-                '/requirements.txt',
-                '/pom.xml',
-                
-                # Common security files
-                '/security.txt',
-                '/.well-known/security.txt',
-                '/security.html',
-                
-                # Common cache files
-                '/cache/',
-                '/tmp/',
-                '/temp/',
-                
-                # Common upload directories
-                '/uploads/',
-                '/files/',
-                '/images/',
-                '/media/',
-                
-                # Common backup patterns with dates
-                '/backup_2023.zip',
-                '/backup_2023.tar.gz',
-                '/backup_2023.sql',
-                
-                # Common configuration backups
-                '/config.bak',
-                '/config.old',
-                '/config.backup',
-                
-                # Common database backups
-                '/database.bak',
-                '/database.old',
-                '/database.backup',
-                
-                # Common log backups
-                '/logs.bak',
-                '/logs.old',
-                '/logs.backup'
-            ]
-            
             # Create results window
             results_window = tk.Toplevel(self.root)
             results_window.title("Common Files Check Results")
@@ -2007,7 +1604,7 @@ Attack Details:
             progress_frame = ttk.Frame(results_window)
             progress_frame.pack(fill=tk.X, padx=5, pady=5)
             
-            progress = ttk.Progressbar(progress_frame, mode='determinate', maximum=len(sensitive_files))
+            progress = ttk.Progressbar(progress_frame, mode='determinate', maximum=len(self.common_files))
             progress.pack(fill=tk.X, expand=True, padx=5)
             
             def check_files():
@@ -2034,7 +1631,7 @@ Attack Details:
                         }
                         verify = self.verify_cert.get()
                     
-                    for i, file_path in enumerate(sensitive_files):
+                    for i, file_path in enumerate(self.common_files):
                         # Update progress
                         progress['value'] = i + 1
                         results_window.update()
@@ -2062,7 +1659,7 @@ Attack Details:
                     
                     # Show summary
                     results_text.insert(tk.END, "\n=== Summary ===\n")
-                    results_text.insert(tk.END, f"Total files checked: {len(sensitive_files)}\n")
+                    results_text.insert(tk.END, f"Total files checked: {len(self.common_files)}\n")
                     results_text.insert(tk.END, f"Files found: {len(found_files)}\n\n")
                     
                     if found_files:
