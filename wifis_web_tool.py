@@ -616,7 +616,7 @@ class HTTPRequestTool:
                                 self.root.after(0, lambda line=line: process_line(line))
                         
                         # Show completion message
-                        self.root.after(0, lambda: messagebox.showinfo("TestSSL", f"TestSSL scan completed for {domain}"))
+                        self.root.after(0, lambda: messagebox.showinfo("TestSSL", f"TestSSL scan completed for {domain}, file can be found in testssl folder."))
                         
                     except Exception as e:
                         # Make sure we change back to original directory even if there's an error
