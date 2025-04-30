@@ -134,10 +134,10 @@ class HTTPRequestTool:
         self.proxy_check = ttk.Checkbutton(proxy_frame, text="Use Proxy", variable=self.use_proxy)
         self.proxy_check.pack(side=tk.LEFT, padx=5)
         
-        # Add proxy address entry
+        # Add proxy address entry with default Burp Suite address
         self.proxy_address = ttk.Entry(proxy_frame, width=30)
         self.proxy_address.pack(side=tk.LEFT, padx=5)
-        self.proxy_address.insert(0, "http://localhost:8080")
+        self.proxy_address.insert(0, "http://127.0.0.1:8080")  # Default Burp Suite address
         
         # Add proxy CA cert checkbox
         self.verify_cert = tk.BooleanVar(value=False)
@@ -147,25 +147,6 @@ class HTTPRequestTool:
         # Add Wayback Machine button
         self.wayback_button = ttk.Button(button_frame, text="Wayback Machine", command=self.search_wayback_machine)
         self.wayback_button.pack(side=tk.LEFT, padx=5)
-
-        # Add proxy settings
-        proxy_frame = ttk.Frame(button_frame)
-        proxy_frame.pack(side=tk.LEFT, padx=5)
-        
-        # Add proxy checkbox
-        self.use_proxy = tk.BooleanVar(value=False)
-        self.proxy_check = ttk.Checkbutton(proxy_frame, text="Use Proxy", variable=self.use_proxy)
-        self.proxy_check.pack(side=tk.LEFT, padx=5)
-        
-        # Add proxy address entry
-        self.proxy_address = ttk.Entry(proxy_frame, width=30)
-        self.proxy_address.pack(side=tk.LEFT, padx=5)
-        self.proxy_address.insert(0, "http://localhost:8080")
-        
-        # Add proxy CA cert checkbox
-        self.verify_cert = tk.BooleanVar(value=False)
-        self.cert_check = ttk.Checkbutton(proxy_frame, text="Verify Proxy Cert", variable=self.verify_cert)
-        self.cert_check.pack(side=tk.LEFT, padx=5)
 
         # Dictionary of header information
         self.header_info = {
@@ -513,11 +494,29 @@ class HTTPRequestTool:
                 if not proxy_address:
                     messagebox.showerror("Error", "Please enter a proxy address")
                     return
+                
+                # Ensure proxy address is properly formatted for Burp Suite
+                if not proxy_address.startswith(('http://', 'https://')):
+                    proxy_address = 'http://' + proxy_address
+                
                 proxies = {
                     'http': proxy_address,
                     'https': proxy_address
                 }
                 verify = self.verify_cert.get()
+                
+                # Test proxy connection
+                try:
+                    test_response = requests.get('https://example.com', proxies=proxies, verify=verify, timeout=5)
+                except requests.exceptions.ProxyError:
+                    messagebox.showerror("Proxy Error", "Could not connect to Burp Suite proxy. Please ensure Burp Suite is running and listening on the specified port.")
+                    return
+                except requests.exceptions.SSLError:
+                    messagebox.showerror("SSL Error", "SSL verification failed. Try unchecking 'Verify Proxy Cert' or importing Burp Suite's CA certificate.")
+                    return
+                except Exception as e:
+                    messagebox.showerror("Proxy Error", f"Error connecting to proxy: {str(e)}")
+                    return
             
             # Send the request
             response = requests.request(
