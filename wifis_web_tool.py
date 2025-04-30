@@ -279,7 +279,7 @@ class HTTPRequestTool:
             "Content-Security-Policy-Report-Only": "Allows web developers to experiment with policies by monitoring their effects",
             "Content-Type": "The MIME type of this content",
             "Cross-Origin-Embedder-Policy": "Configures the document's policy for loading and embedding cross-origin resources. Requires CORP or CORS headers for cross-site resources, or allows loading with stripped credentials. Applies to loaded resources, iframes, and nested frames.",
-            "Cross-Origin-Opener-Policy": "Controls whether new documents opened via Window.open() or navigation share the same browsing context group. When in separate groups, references between documents are severed, preventing cross-origin attacks (XS-Leaks).",
+            "Cross-Origin-Opener-Policy": "Controls whether new documents share the same browsing context group (BCG). Options: unsafe-none (default, permits sharing), same-origin (isolates to same-origin only), same-origin-allow-popups (allows popups with unsafe-none), noopener-allow-popups (isolates but allows popups). Prevents XS-Leaks by severing references between documents.",
             "Cross-Origin-Resource-Policy": "Indicates that the browser should block no-cors cross-origin/cross-site requests to the resource. Specifies which sites/origins are allowed to load the resource.",
             "Date": "The date and time that the message was sent",
             "Delta-Base": "Specifies the delta-encoding entity tag of the response",
