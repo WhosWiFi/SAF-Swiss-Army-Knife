@@ -251,7 +251,7 @@ class HTTPRequestTool:
             "X-Robots-Tag": "Defines how crawlers should index URLs",
 
             # Response Headers (Alphabetized)
-            "Accept-CH": "Requests HTTP Client Hints",
+            "Accept-CH": "Specifies which client hint headers should be included in subsequent requests. Client hints provide information about the client's device, network, and preferences. Common hints include: Device-Memory (RAM), DPR (device pixel ratio), Viewport-Width, Width, Save-Data (data saving preference), and Sec-CH-UA (user agent information).",
             "Accept-Patch": "Specifies which patch document formats are supported",
             "Accept-Ranges": "What partial content range types are supported",
             "Access-Control-Allow-Credentials": "Indicates whether credentials can be exposed",
@@ -275,7 +275,7 @@ class HTTPRequestTool:
             "Content-Location": "An alternate location for the returned data",
             "Content-MD5": "A Base64-encoded binary MD5 sum of the content",
             "Content-Range": "Where in a full body message this partial message belongs",
-            "Content-Security-Policy": "Defines the Content Security Policy",
+            "Content-Security-Policy": "Controls resources the user agent can load for a page. Directives: default-src (fallback for all fetch directives), script-src (JavaScript sources including eval(), inline scripts, and WebAssembly), style-src (stylesheet sources including inline styles), img-src (image and favicon sources), connect-src (URLs for XMLHttpRequest, WebSocket, and EventSource), font-src (font sources for @font-face), object-src (plugin sources for <object>, <embed>, and <applet>), media-src (media sources for <audio>, <video>, and <track>), frame-src (frame sources for <frame> and <iframe>), child-src (sources for web workers and nested browsing contexts), worker-src (sources for Worker, SharedWorker, and ServiceWorker), manifest-src (sources for application manifest files), base-uri (restricts URLs in <base> elements), form-action (restricts form submission URLs), frame-ancestors (specifies valid parent frames), sandbox (enables sandbox with optional restrictions), report-uri (sends violation reports), report-to (sends violation reports to specified endpoint), upgrade-insecure-requests (upgrades HTTP to HTTPS). Sources can include: 'self' (same origin), 'none' (block all), 'unsafe-inline' (allow inline resources), 'unsafe-eval' (allow dynamic code evaluation), 'wasm-unsafe-eval' (allow WebAssembly), 'strict-dynamic' (trust dynamic scripts), blob: (allow blob URLs), data: (allow data URLs), and specific domains.",
             "Content-Security-Policy-Report-Only": "Allows web developers to experiment with policies by monitoring their effects",
             "Content-Type": "The MIME type of this content",
             "Cross-Origin-Embedder-Policy": "Configures the document's policy for loading and embedding cross-origin resources. Requires CORP or CORS headers for cross-site resources, or allows loading with stripped credentials. Applies to loaded resources, iframes, and nested frames.",
@@ -288,7 +288,7 @@ class HTTPRequestTool:
             "IM": "Instance-manipulations applied to the response",
             "Last-Modified": "Contains date/time when resource was last modified",
             "Link": "Serializes one or more links in HTTP headers",
-            "Location": "Indicates URL to redirect to",
+            "Location": "Indicates what URL to redirect to",
             "NEL": "Configures network request logging (Experimental)",
             "No-Vary-Search": "Specifies rules for how URL query parameters affect cache matching (Experimental)",
             "Observe-Browsing-Topics": "Marks topics of interest inferred from calling site's URL (Experimental)",
@@ -305,12 +305,12 @@ class HTTPRequestTool:
             "Retry-After": "If an entity is temporarily unavailable, this instructs the client to try again",
             "Sec-WebSocket-Accept": "Used in WebSocket opening handshake to indicate server's willingness to upgrade to WebSocket connection",
             "Sec-Speculation-Tags": "Contains tag values from speculation rules that resulted in the speculation",
-            "Server": "A name for the server",
+            "Server": "Describes the software used by the origin server.",
             "Server-Timing": "Communicates performance metrics about the request-response cycle",
             "Service-Worker": "Included in fetches for a service worker's script resource",
             "Service-Worker-Allowed": "Used to broaden the path restriction for a service worker's default scope",
             "Service-Worker-Navigation-Preload": "Indicates request was from service worker navigation preloading",
-            "Set-Cookie": "An HTTP cookie",
+            "Set-Cookie": "Sends a cookie from the server to the user agent. Multiple Set-Cookie headers can be sent in the same response to set multiple cookies. Attributes: Domain (host to send cookie to), Expires (cookie lifetime as HTTP-date), HttpOnly (prevents JavaScript access but can still be accessed by the server), Max-Age (seconds until expiration), Path (URL path requirement), SameSite (controls cross-site sending: Strict/Lax/None), Secure (HTTPS-only transmission).",
             "Set-Login": "Sent by federated identity provider to set its login status",
             "SourceMap": "Provides the location of a source map for the resource",
             "Speculation-Rules": "Provides URLs pointing to text resources containing speculation rule JSON definitions",
@@ -332,10 +332,10 @@ class HTTPRequestTool:
             "Want-Repr-Digest": "Indicates preference for recipient to send Repr-Digest integrity header",
             "WWW-Authenticate": "Indicates the authentication scheme that should be used to access the requested entity",
             "X-Content-Type-Options": "The only defined value, 'nosniff', prevents Internet Explorer from MIME-sniffing a response away from the declared content-type",
-            "X-Frame-Options": "Clickjacking protection",
+            "X-Frame-Options": "Controls whether a page can be rendered in a frame, iframe, embed or object. Used to prevent clickjacking attacks.",
             "X-Powered-By": "Specifies the technology (e.g. ASP.NET, PHP, JBoss) supporting the web application",
             "X-UA-Compatible": "Recommends the preferred rendering engine to use to display the content",
-            "X-XSS-Protection": "Cross-site scripting (XSS) filter"
+            "X-XSS-Protection": "Deprecated header that enabled XSS filtering in older browsers. Options: 0 (disable), 1 (enable), 1;mode=block (block page), 1;report=URI (report violations). Note: This header is deprecated and can create XSS vulnerabilities. Content-Security-Policy is the modern day replacement."
         }
 
     def is_jwt(self, token):
