@@ -2825,9 +2825,9 @@ Attack Details:
             # Add request headers to tree
             for header, value in request_headers.items():
                 header_item = request_tree.insert("", tk.END, text=header)
-                request_tree.insert(header_item, tk.END, text=f"Value: {value}")
+                request_tree.insert(header_item, tk.END, text=f"Value:                   {value}")
                 description = self.header_info.get(header, "Custom header")
-                request_tree.insert(header_item, tk.END, text=f"Description: {description}")
+                request_tree.insert(header_item, tk.END, text=f"Description:        {description}")
         
         # Get response text
         response_text = self.response_text.get("1.0", tk.END).strip()
@@ -2875,9 +2875,9 @@ Attack Details:
             # Add response headers to tree
             for header, value in response_headers.items():
                 header_item = response_tree.insert("", tk.END, text=header)
-                response_tree.insert(header_item, tk.END, text=f"Value: {value}")
+                response_tree.insert(header_item, tk.END, text=f"Value:                  {value}")
                 description = self.header_info.get(header, "Custom header")
-                response_tree.insert(header_item, tk.END, text=f"Description: {description}")
+                response_tree.insert(header_item, tk.END, text=f"Description:        {description}")
 
 def main():
     root = tk.Tk()
