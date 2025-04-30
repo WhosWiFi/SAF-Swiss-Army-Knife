@@ -1600,6 +1600,10 @@ Attack Details:
             results_text.config(yscrollcommand=scrollbar.set)
             scrollbar.config(command=results_text.yview)
             
+            # Configure text colors
+            results_text.tag_configure("success", foreground="green")
+            results_text.tag_configure("error", foreground="red")
+            
             # Add progress bar
             progress_frame = ttk.Frame(results_window)
             progress_frame.pack(fill=tk.X, padx=5, pady=5)
@@ -1649,11 +1653,11 @@ Attack Details:
                             )
                             if response.status_code == 200:
                                 found_files.append((file_path, url, response))
-                                results_text.insert(tk.END, f"✅ Found: {file_path}\n")
+                                results_text.insert(tk.END, f"✅ Found: {file_path}\n", "success")
                             else:
-                                results_text.insert(tk.END, f"❌ Not found: {file_path}\n")
+                                results_text.insert(tk.END, f"❌ Not found: {file_path}\n", "error")
                         except:
-                            results_text.insert(tk.END, f"❌ Error checking: {file_path}\n")
+                            results_text.insert(tk.END, f"❌ Error checking: {file_path}\n", "error")
                         
                         results_text.see(tk.END)
                     
@@ -1665,7 +1669,7 @@ Attack Details:
                     if found_files:
                         results_text.insert(tk.END, "Found files:\n")
                         for file_path, url, response in found_files:
-                            results_text.insert(tk.END, f"- {file_path}\n")
+                            results_text.insert(tk.END, f"- {file_path}\n", "success")
                             results_text.insert(tk.END, f"  URL: {url}\n")
                             results_text.insert(tk.END, f"  Response length: {len(response.text)} bytes\n\n")
                     
@@ -1692,7 +1696,7 @@ Attack Details:
                         messagebox.showinfo("Report Saved", f"Report saved to {report_file}")
                 
                 except Exception as e:
-                    results_text.insert(tk.END, f"\nError: {str(e)}\n")
+                    results_text.insert(tk.END, f"\nError: {str(e)}\n", "error")
             
             # Run the check in a separate thread
             import threading
