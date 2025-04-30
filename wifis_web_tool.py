@@ -17,6 +17,8 @@ import time
 class HTTPRequestTool:
     def __init__(self, root):
         self.root = root
+        self.jwt_attacks = JWTAttacks(self.root)
+        self.tools = Tools(self.root)
         self.root.title("HTTP Request Tool")
         self.root.geometry("1200x800")
         
@@ -66,7 +68,7 @@ class HTTPRequestTool:
         jwt_header = ttk.Frame(self.jwt_section)
         jwt_header.pack(fill=tk.X, pady=5)
         self.minimize_jwt = tk.BooleanVar(value=False)
-        self.minimize_check = ttk.Checkbutton(jwt_header, text="Minimize", variable=self.minimize_jwt, command=self.toggle_jwt_section)
+        self.minimize_check = ttk.Checkbutton(jwt_header, text="Minimize", variable=self.minimize_jwt, command=self.jwt_attacks.toggle_jwt_section)
         self.minimize_check.pack(side=tk.RIGHT, padx=5)
         
         # Add edit button and secret key frame
@@ -85,7 +87,7 @@ class HTTPRequestTool:
         self.secret_entry = ttk.Entry(secret_frame, width=20)
         self.secret_entry.pack(side=tk.LEFT, padx=5)
         
-        self.edit_button = ttk.Button(edit_frame, text="Edit JWT", command=self.edit_jwt)
+        self.edit_button = ttk.Button(edit_frame, text="Edit JWT", command=self.jwt_attacks.edit_jwt)
         self.edit_button.pack(side=tk.RIGHT, padx=5)
         
         self.jwt_text = tk.Text(self.jwt_section, width=80, height=20)
@@ -111,7 +113,7 @@ class HTTPRequestTool:
         self.request_text.pack(padx=5, pady=5, fill=tk.BOTH, expand=True)
         
         # Bind text changes to JWT detection
-        self.request_text.bind('<<Modified>>', self.on_text_change)
+        self.request_text.bind('<<Modified>>', self.jwt_attacks.on_text_change)
         
         # Button frame
         button_frame = ttk.Frame(self.request_frame)
@@ -122,27 +124,27 @@ class HTTPRequestTool:
         self.send_button.pack(side=tk.LEFT, padx=5)
         
         # JWT Attacks button
-        self.jwt_attacks_button = ttk.Button(button_frame, text="JWT Attacks", command=self.show_jwt_attacks_menu)
+        self.jwt_attacks_button = ttk.Button(button_frame, text="JWT Attacks", command=self.jwt_attacks.show_jwt_attacks_menu)
         self.jwt_attacks_button.pack(side=tk.LEFT, padx=5)
         
         # Clickjack button
-        self.clickjack_button = ttk.Button(button_frame, text="Generate Clickjack", command=self.generate_clickjack)
+        self.clickjack_button = ttk.Button(button_frame, text="Generate Clickjack", command=self.tools.generate_clickjack)
         self.clickjack_button.pack(side=tk.LEFT, padx=5)
         
         # TestSSL button
-        self.testssl_button = ttk.Button(button_frame, text="Run TestSSL", command=self.run_testssl)
+        self.testssl_button = ttk.Button(button_frame, text="Run TestSSL", command=self.tools.run_testssl)
         self.testssl_button.pack(side=tk.LEFT, padx=5)
         
         # Add Check for Common Files button
-        self.check_files_button = ttk.Button(button_frame, text="Check for Common Files", command=self.check_common_files)
+        self.check_files_button = ttk.Button(button_frame, text="Check for Common Files", command=self.tools.check_common_files)
         self.check_files_button.pack(side=tk.LEFT, padx=5)
         
         # Add Analyze Static File button
-        self.analyze_static_button = ttk.Button(button_frame, text="Analyze Static File", command=self.analyze_static_file)
+        self.analyze_static_button = ttk.Button(button_frame, text="Analyze Static File", command=self.tools.analyze_static_file)
         self.analyze_static_button.pack(side=tk.LEFT, padx=5)
         
         # Add Analyze Headers button
-        self.analyze_headers_button = ttk.Button(button_frame, text="Analyze Headers", command=self.analyze_headers)
+        self.analyze_headers_button = ttk.Button(button_frame, text="Analyze Headers", command=self.tools.analyze_headers)
         self.analyze_headers_button.pack(side=tk.LEFT, padx=5)
         
         # Add proxy configuration frame
@@ -165,9 +167,114 @@ class HTTPRequestTool:
         self.cert_check.pack(side=tk.LEFT, padx=5)
 
         # Add Wayback Machine button
-        self.wayback_button = ttk.Button(button_frame, text="Wayback Machine", command=self.search_wayback_machine)
+        self.wayback_button = ttk.Button(button_frame, text="Wayback Machine", command=self.tools.search_wayback_machine)
         self.wayback_button.pack(side=tk.LEFT, padx=5)
 
+    def copy_response(self):
+        response_text = self.response_text.get("1.0", tk.END).strip()
+        self.root.clipboard_clear()
+        self.root.clipboard_append(response_text)
+        messagebox.showinfo("Success", "Content copied to clipboard!")
+    
+    def process_request(self):
+        request_text = self.request_text.get("1.0", tk.END).strip()
+        
+        try:
+            # Parse the raw HTTP request
+            request_lines = request_text.split('\n')
+            if not request_lines:
+                raise ValueError("Empty request")
+
+            # Parse first line (method, path, version)
+            method, path, *_ = request_lines[0].split()
+            
+            # Parse headers
+            headers = {}
+            current_line = 1
+            while current_line < len(request_lines) and request_lines[current_line].strip():
+                header_line = request_lines[current_line].strip()
+                key, value = header_line.split(':', 1)
+                headers[key.strip()] = value.strip()
+                current_line += 1
+            
+            # Get body if exists (after blank line)
+            body = None
+            if current_line < len(request_lines):
+                body = '\n'.join(request_lines[current_line + 1:]).strip()
+            
+            # Parse URL and enforce HTTPS
+            if not path.startswith('http'):
+                # If host header exists, use it to construct full URL
+                host = headers.get('Host', '')
+                if host:
+                    # Always use HTTPS
+                    path = f"https://{host}{path}"
+                else:
+                    raise ValueError("No host specified in headers and path is not absolute URL")
+            else:
+                # If URL starts with http://, change it to https://
+                if path.startswith('http://'):
+                    path = path.replace('http://', 'https://', 1)
+            
+            # Configure proxy if enabled
+            proxies = None
+            verify = True
+            if self.use_proxy.get():
+                proxy_address = self.proxy_address.get().strip()
+                if not proxy_address:
+                    messagebox.showerror("Error", "Please enter a proxy address")
+                    return
+                
+                # Ensure proxy address is properly formatted for Burp Suite
+                if not proxy_address.startswith(('http://', 'https://')):
+                    proxy_address = 'http://' + proxy_address
+                
+                proxies = {
+                    'http': proxy_address,
+                    'https': proxy_address
+                }
+                verify = self.verify_cert.get()
+                
+                # Test proxy connection
+                try:
+                    test_response = requests.get('https://example.com', proxies=proxies, verify=verify, timeout=5)
+                except requests.exceptions.ProxyError:
+                    messagebox.showerror("Proxy Error", "Could not connect to Burp Suite proxy. Please ensure Burp Suite is running and listening on the specified port.")
+                    return
+                except requests.exceptions.SSLError:
+                    messagebox.showerror("SSL Error", "SSL verification failed. Try unchecking 'Verify Proxy Cert' or importing Burp Suite's CA certificate.")
+                    return
+                except Exception as e:
+                    messagebox.showerror("Proxy Error", f"Error connecting to proxy: {str(e)}")
+                    return
+            
+            # Send the request
+            response = requests.request(
+                method=method,
+                url=path,
+                headers=headers,
+                data=body,
+                verify=verify,
+                proxies=proxies,
+                allow_redirects=False  # Don't follow redirects to see the actual response
+            )
+            
+            # Format response
+            response_text = f"HTTP/{response.raw.version / 10.0} {response.status_code} {response.reason}\n"
+            for key, value in response.headers.items():
+                response_text += f"{key}: {value}\n"
+            response_text += f"\n{response.text}"
+            
+            self.response_text.delete("1.0", tk.END)
+            self.response_text.insert("1.0", response_text)
+            
+        except Exception as e:
+            self.response_text.delete("1.0", tk.END)
+            self.response_text.insert("1.0", f"Error processing request: {str(e)}")
+
+class JWTAttacks:
+    def __init__(self, root):
+        self.root = root
     def is_jwt(self, token):
         # Split the token into parts
         parts = token.split('.')
@@ -315,244 +422,6 @@ class HTTPRequestTool:
             self.jwt_text.insert("1.0", decoded_output)
         else:
             self.jwt_text.insert("1.0", "No JWT tokens found in request")
-
-    def copy_response(self):
-        response_text = self.response_text.get("1.0", tk.END).strip()
-        self.root.clipboard_clear()
-        self.root.clipboard_append(response_text)
-        messagebox.showinfo("Success", "Content copied to clipboard!")
-
-    def generate_clickjack(self):
-        url = simpledialog.askstring("Generate Clickjack", "Enter target URL:")
-        if url:
-            clickjack_html = f"""<html>
-   <head>
-      <title>Aon Clickjacking Example PoC</title>
-      <style>
-         body {{
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-         }}
-         .container {{
-            max-width: 1200px;
-            margin: 0 auto;
-         }}
-         h1 {{
-            color: #333;
-            margin-bottom: 20px;
-         }}
-         .iframe-container {{
-            position: relative;
-            width: 100%;
-            height: 80vh;
-         }}
-         iframe {{
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            opacity: 0.5;
-            border: 2px solid #333;
-         }}
-      </style>
-   </head>
-   <body>
-      <div class="container">
-         <h1>Aon Clickjacking PoC</h1>
-         <div class="iframe-container">
-            <iframe src="{url}"></iframe>
-         </div>
-      </div>
-   </body>
-</html>"""
-            self.response_text.delete("1.0", tk.END)
-            self.response_text.insert("1.0", clickjack_html)
-
-    def process_request(self):
-        request_text = self.request_text.get("1.0", tk.END).strip()
-        
-        try:
-            # Parse the raw HTTP request
-            request_lines = request_text.split('\n')
-            if not request_lines:
-                raise ValueError("Empty request")
-
-            # Parse first line (method, path, version)
-            method, path, *_ = request_lines[0].split()
-            
-            # Parse headers
-            headers = {}
-            current_line = 1
-            while current_line < len(request_lines) and request_lines[current_line].strip():
-                header_line = request_lines[current_line].strip()
-                key, value = header_line.split(':', 1)
-                headers[key.strip()] = value.strip()
-                current_line += 1
-            
-            # Get body if exists (after blank line)
-            body = None
-            if current_line < len(request_lines):
-                body = '\n'.join(request_lines[current_line + 1:]).strip()
-            
-            # Parse URL and enforce HTTPS
-            if not path.startswith('http'):
-                # If host header exists, use it to construct full URL
-                host = headers.get('Host', '')
-                if host:
-                    # Always use HTTPS
-                    path = f"https://{host}{path}"
-                else:
-                    raise ValueError("No host specified in headers and path is not absolute URL")
-            else:
-                # If URL starts with http://, change it to https://
-                if path.startswith('http://'):
-                    path = path.replace('http://', 'https://', 1)
-            
-            # Configure proxy if enabled
-            proxies = None
-            verify = True
-            if self.use_proxy.get():
-                proxy_address = self.proxy_address.get().strip()
-                if not proxy_address:
-                    messagebox.showerror("Error", "Please enter a proxy address")
-                    return
-                
-                # Ensure proxy address is properly formatted for Burp Suite
-                if not proxy_address.startswith(('http://', 'https://')):
-                    proxy_address = 'http://' + proxy_address
-                
-                proxies = {
-                    'http': proxy_address,
-                    'https': proxy_address
-                }
-                verify = self.verify_cert.get()
-                
-                # Test proxy connection
-                try:
-                    test_response = requests.get('https://example.com', proxies=proxies, verify=verify, timeout=5)
-                except requests.exceptions.ProxyError:
-                    messagebox.showerror("Proxy Error", "Could not connect to Burp Suite proxy. Please ensure Burp Suite is running and listening on the specified port.")
-                    return
-                except requests.exceptions.SSLError:
-                    messagebox.showerror("SSL Error", "SSL verification failed. Try unchecking 'Verify Proxy Cert' or importing Burp Suite's CA certificate.")
-                    return
-                except Exception as e:
-                    messagebox.showerror("Proxy Error", f"Error connecting to proxy: {str(e)}")
-                    return
-            
-            # Send the request
-            response = requests.request(
-                method=method,
-                url=path,
-                headers=headers,
-                data=body,
-                verify=verify,
-                proxies=proxies,
-                allow_redirects=False  # Don't follow redirects to see the actual response
-            )
-            
-            # Format response
-            response_text = f"HTTP/{response.raw.version / 10.0} {response.status_code} {response.reason}\n"
-            for key, value in response.headers.items():
-                response_text += f"{key}: {value}\n"
-            response_text += f"\n{response.text}"
-            
-            self.response_text.delete("1.0", tk.END)
-            self.response_text.insert("1.0", response_text)
-            
-        except Exception as e:
-            self.response_text.delete("1.0", tk.END)
-            self.response_text.insert("1.0", f"Error processing request: {str(e)}")
-
-    def run_testssl(self):
-        domain = simpledialog.askstring("TestSSL", "Enter domain to test:")
-        if domain:
-            try:
-                # Create a new window for testssl output
-                testssl_window = tk.Toplevel(self.root)
-                testssl_window.title(f"TestSSL Results - {domain}")
-                testssl_window.geometry("800x600")
-                
-                # Create a text widget for output
-                output_text = tk.Text(testssl_window, wrap=tk.WORD, font=('Courier', 10))
-                output_text.pack(fill=tk.BOTH, expand=True)
-                
-                # Create a scrollbar
-                scrollbar = tk.Scrollbar(output_text)
-                scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-                output_text.config(yscrollcommand=scrollbar.set)
-                scrollbar.config(command=output_text.yview)
-                
-                # Add initial message
-                output_text.insert(tk.END, f"Starting TestSSL scan for {domain}...\n\n")
-                
-                def process_line(line):
-                    # Remove any ANSI codes
-                    line = re.sub(r'\033\[[0-9;]*m', '', line)
-                    output_text.insert(tk.END, line + '\n')
-                
-                def run_testssl_thread():
-                    try:
-                        # Store current directory
-                        current_dir = os.getcwd()
-                        
-                        # Change to testssl directory
-                        os.chdir('testssl')
-                        
-                        # Make sure testssl.sh is executable
-                        os.chmod('testssl.sh', 0o755)
-                        
-                        # Run testssl.sh with HTML output using system OpenSSL
-                        process = subprocess.Popen(
-                            ['./testssl.sh', '--html', domain],
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE,
-                            text=True,
-                            bufsize=1,
-                            universal_newlines=True
-                        )
-                        
-                        # Read output in real-time
-                        while True:
-                            output = process.stdout.readline()
-                            if output == '' and process.poll() is not None:
-                                break
-                            if output:
-                                # Process and display the line
-                                self.root.after(0, lambda line=output: process_line(line))
-                                self.root.after(0, lambda: output_text.see(tk.END))
-                        
-                        # Get any remaining output
-                        stdout, stderr = process.communicate()
-                        
-                        # Change back to original directory
-                        os.chdir(current_dir)
-                        
-                        # Update the text widget with any remaining output
-                        if stdout:
-                            for line in stdout.splitlines():
-                                self.root.after(0, lambda line=line: process_line(line))
-                        if stderr:
-                            output_text.insert(tk.END, "\n\nErrors:\n")
-                            for line in stderr.splitlines():
-                                self.root.after(0, lambda line=line: process_line(line))
-                        
-                        # Show completion message
-                        self.root.after(0, lambda: messagebox.showinfo("TestSSL", f"TestSSL scan completed for {domain}, file can be found in testssl folder."))
-                        
-                    except Exception as e:
-                        # Make sure we change back to original directory even if there's an error
-                        os.chdir(current_dir)
-                        self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to run TestSSL: {str(e)}"))
-                
-                # Start the testssl process in a separate thread
-                import threading
-                threading.Thread(target=run_testssl_thread, daemon=True).start()
-                
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to start TestSSL: {str(e)}")
 
     def toggle_jwt_section(self):
         if self.minimize_jwt.get():
@@ -1539,6 +1408,147 @@ Attack Details:
         except Exception as e:
             messagebox.showerror("Error", f"Failed to parse JWT: {str(e)}")
             return
+class Tools:
+    def __init__(self, root):
+        self.root = root
+
+    def generate_clickjack(self):
+        url = simpledialog.askstring("Generate Clickjack", "Enter target URL:")
+        if url:
+            clickjack_html = f"""<html>
+   <head>
+      <title>Aon Clickjacking Example PoC</title>
+      <style>
+         body {{
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+         }}
+         .container {{
+            max-width: 1200px;
+            margin: 0 auto;
+         }}
+         h1 {{
+            color: #333;
+            margin-bottom: 20px;
+         }}
+         .iframe-container {{
+            position: relative;
+            width: 100%;
+            height: 80vh;
+         }}
+         iframe {{
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0.5;
+            border: 2px solid #333;
+         }}
+      </style>
+   </head>
+   <body>
+      <div class="container">
+         <h1>Aon Clickjacking PoC</h1>
+         <div class="iframe-container">
+            <iframe src="{url}"></iframe>
+         </div>
+      </div>
+   </body>
+</html>"""
+            self.response_text.delete("1.0", tk.END)
+            self.response_text.insert("1.0", clickjack_html)
+
+
+    def run_testssl(self):
+        domain = simpledialog.askstring("TestSSL", "Enter domain to test:")
+        if domain:
+            try:
+                # Create a new window for testssl output
+                testssl_window = tk.Toplevel(self.root)
+                testssl_window.title(f"TestSSL Results - {domain}")
+                testssl_window.geometry("800x600")
+                
+                # Create a text widget for output
+                output_text = tk.Text(testssl_window, wrap=tk.WORD, font=('Courier', 10))
+                output_text.pack(fill=tk.BOTH, expand=True)
+                
+                # Create a scrollbar
+                scrollbar = tk.Scrollbar(output_text)
+                scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+                output_text.config(yscrollcommand=scrollbar.set)
+                scrollbar.config(command=output_text.yview)
+                
+                # Add initial message
+                output_text.insert(tk.END, f"Starting TestSSL scan for {domain}...\n\n")
+                
+                def process_line(line):
+                    # Remove any ANSI codes
+                    line = re.sub(r'\033\[[0-9;]*m', '', line)
+                    output_text.insert(tk.END, line + '\n')
+                
+                def run_testssl_thread():
+                    try:
+                        # Store current directory
+                        current_dir = os.getcwd()
+                        
+                        # Change to testssl directory
+                        os.chdir('testssl')
+                        
+                        # Make sure testssl.sh is executable
+                        os.chmod('testssl.sh', 0o755)
+                        
+                        # Run testssl.sh with HTML output using system OpenSSL
+                        process = subprocess.Popen(
+                            ['./testssl.sh', '--html', domain],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            text=True,
+                            bufsize=1,
+                            universal_newlines=True
+                        )
+                        
+                        # Read output in real-time
+                        while True:
+                            output = process.stdout.readline()
+                            if output == '' and process.poll() is not None:
+                                break
+                            if output:
+                                # Process and display the line
+                                self.root.after(0, lambda line=output: process_line(line))
+                                self.root.after(0, lambda: output_text.see(tk.END))
+                        
+                        # Get any remaining output
+                        stdout, stderr = process.communicate()
+                        
+                        # Change back to original directory
+                        os.chdir(current_dir)
+                        
+                        # Update the text widget with any remaining output
+                        if stdout:
+                            for line in stdout.splitlines():
+                                self.root.after(0, lambda line=line: process_line(line))
+                        if stderr:
+                            output_text.insert(tk.END, "\n\nErrors:\n")
+                            for line in stderr.splitlines():
+                                self.root.after(0, lambda line=line: process_line(line))
+                        
+                        # Show completion message
+                        self.root.after(0, lambda: messagebox.showinfo("TestSSL", f"TestSSL scan completed for {domain}, file can be found in testssl folder."))
+                        
+                    except Exception as e:
+                        # Make sure we change back to original directory even if there's an error
+                        os.chdir(current_dir)
+                        self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to run TestSSL: {str(e)}"))
+                
+                # Start the testssl process in a separate thread
+                import threading
+                threading.Thread(target=run_testssl_thread, daemon=True).start()
+                
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to start TestSSL: {str(e)}")
+
 
     def check_common_files(self):
         # Get current request text
@@ -1704,7 +1714,7 @@ Attack Details:
                             messagebox.showinfo("Report Saved", f"Report saved to {report_file}")
                             results_window.lift()
                             results_window.focus_force()
-                            
+                        
                         except Exception as e:
                             messagebox.showerror("Error", f"Failed to save report: {str(e)}")
                             results_window.lift()
