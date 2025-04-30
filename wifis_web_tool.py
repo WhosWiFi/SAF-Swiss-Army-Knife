@@ -2971,7 +2971,8 @@ Attack Details:
             for header, value in request_headers.items():
                 header_item = request_tree.insert("", tk.END, text=header)
                 request_tree.insert(header_item, tk.END, text=f"Value:                   {value}")
-                description = self.header_info.get(header, "Custom header")
+                # Case-insensitive lookup
+                description = next((self.header_info[k] for k in self.header_info if k.lower() == header.lower()), "Custom header")
                 request_tree.insert(header_item, tk.END, text=f"Description:        {description}")
         
         # Get response text
@@ -3021,7 +3022,8 @@ Attack Details:
             for header, value in response_headers.items():
                 header_item = response_tree.insert("", tk.END, text=header)
                 response_tree.insert(header_item, tk.END, text=f"Value:                  {value}")
-                description = self.header_info.get(header, "Custom header")
+                # Case-insensitive lookup
+                description = next((self.header_info[k] for k in self.header_info if k.lower() == header.lower()), "Custom header")
                 response_tree.insert(header_item, tk.END, text=f"Description:        {description}")
 
 def main():
