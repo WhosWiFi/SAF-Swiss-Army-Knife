@@ -173,13 +173,13 @@ class HTTPRequestTool:
             "From": "The email address of the user making the request",
             "Host": "The domain name of the server and TCP port number",
             "HTTP2-Settings": "Parameters that govern the HTTP/2 connection",
-            "If-Match": "Only perform the action if the client supplied entity matches",
-            "If-Modified-Since": "Allows a 304 Not Modified to be returned",
-            "If-None-Match": "Allows a 304 Not Modified to be returned",
-            "If-Range": "If the entity is unchanged, send missing parts",
-            "If-Unmodified-Since": "Only send the response if not modified since",
-            "Max-Forwards": "Limit the number of times the message can be forwarded",
-            "Origin": "Initiates a request for cross-origin resource sharing",
+            "If-Match": "Makes a request conditional. Server returns resources only if they match one of the ETag values. Uses strong comparison algorithm for byte-by-byte matching. Prevents lost update problems and ensures range requests come from the same resource.",
+            "If-Modified-Since": "Makes a request conditional. Server returns 200 with resource only if modified after the specified date, otherwise returns 304 without body. Used with GET/HEAD to update cached entities without ETags.",
+            "If-None-Match": "Makes a request conditional. Server returns 200 with resource only if no ETag matches, otherwise returns 304. Uses weak comparison algorithm. Prevents lost updates and updates cached entities with ETags.",
+            "If-Range": "Makes a range request conditional. If condition met, returns 206 with partial content; otherwise returns 200 with full resource. Used with Last-Modified or ETag to resume downloads.",
+            "If-Unmodified-Since": "Makes a request conditional. Server processes request only if resource hasn't been modified since specified date. Returns 412 if modified. Used for optimistic concurrency control and range requests.",
+            "Max-Forwards": "Used with TRACE to limit number of nodes (proxies) request goes through. Value decremented at each node until zero or destination reached.",
+            "Origin": "Indicates the origin (scheme, hostname, port) that caused the request. Used for cross-origin resource requests.",
             "Pragma": "Implementation-specific fields",
             "Prefer": "Allows client to request certain behaviors",
             "Proxy-Authorization": "Authorization credentials for connecting to a proxy",
@@ -221,9 +221,9 @@ class HTTPRequestTool:
             "ETag": "An identifier for a specific version of a resource",
             "Expires": "Gives the date/time after which the response is considered stale",
             "IM": "Instance-manipulations applied to the response",
-            "Last-Modified": "The last modified date for the requested object",
-            "Link": "Used to express a typed relationship with another resource",
-            "Location": "Used in redirection, or when a new resource has been created",
+            "Last-Modified": "Contains date/time when resource was last modified. Used as validator in conditional requests. Less accurate than ETag but useful as fallback. Used by crawlers and browsers for caching.",
+            "Link": "Serializes one or more links in HTTP headers. Allows server to point client to metadata resources. Works reliably with preconnect and preload relations.",
+            "Location": "Indicates URL to redirect to. Used with 3XX responses or 201 Created. Method used for redirection depends on status code and original method.",
             "P3P": "This header is supposed to set P3P policy",
             "Pragma": "Implementation-specific headers that may have various effects",
             "Preference-Applied": "Indicates which preferences were applied",
@@ -296,7 +296,9 @@ class HTTPRequestTool:
             "X-Forwarded-Host": "Identifies the original host requested by the client",
             "X-Forwarded-Proto": "Identifies the protocol (HTTP or HTTPS) that a client used to connect to a proxy",
             "X-Permitted-Cross-Domain-Policies": "Defines a meta-policy controlling whether site resources can be accessed cross-origin",
-            "X-Robots-Tag": "Defines how crawlers should index URLs"
+            "X-Robots-Tag": "Defines how crawlers should index URLs",
+            
+            # ... existing code ...
         }
 
     def is_jwt(self, token):
