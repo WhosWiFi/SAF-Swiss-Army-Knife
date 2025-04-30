@@ -148,7 +148,7 @@ class HTTPRequestTool:
         self.wayback_button = ttk.Button(button_frame, text="Wayback Machine", command=self.search_wayback_machine)
         self.wayback_button.pack(side=tk.LEFT, padx=5)
 
-        # Dictionary of header information
+        # Dictionary of header information https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/
         self.header_info = {
             # Request Headers (Alphabetized)
             "A-IM": "Acceptable instance-manipulations for the request",
