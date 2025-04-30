@@ -17,7 +17,7 @@ import time
 class HTTPRequestTool:
     def __init__(self, root):
         self.root = root
-        self.jwt_attacks = JWTAttacks(self.root)
+        self.jwt_attacks = JWTAttacks(self.root, self)  # Pass self to JWTAttacks
         self.tools = Tools(self.root)
         
         # Initialize UI elements first
@@ -26,6 +26,7 @@ class HTTPRequestTool:
         # Now set the UI elements in JWTAttacks class
         self.jwt_attacks.set_ui_elements(
             self.request_text,
+            self.response_text,
             self.jwt_text,
             self.minimize_jwt,
             self.use_secret,
@@ -290,16 +291,19 @@ class HTTPRequestTool:
             self.response_text.insert("1.0", f"Error processing request: {str(e)}")
 
 class JWTAttacks:
-    def __init__(self, root):
+    def __init__(self, root, http_request_tool):
         self.root = root
         self.request_text = None
+        self.response_text = None
         self.jwt_text = None
         self.minimize_jwt = None
         self.use_secret = None
         self.secret_entry = None
+        self.http_request_tool = http_request_tool  # Store the passed instance
     
-    def set_ui_elements(self, request_text, jwt_text, minimize_jwt, use_secret, secret_entry):
+    def set_ui_elements(self, request_text,response_text, jwt_text, minimize_jwt, use_secret, secret_entry):
         self.request_text = request_text
+        self.response_text = response_text
         self.jwt_text = jwt_text
         self.minimize_jwt = minimize_jwt
         self.use_secret = use_secret
@@ -587,7 +591,7 @@ class JWTAttacks:
             # Send the modified request
             self.request_text.delete("1.0", tk.END)
             self.request_text.insert("1.0", modified_request)
-            self.process_request()
+            self.http_request_tool.process_request()
             
             # Get the response status code from the response text
             response_text = self.response_text.get("1.0", tk.END)
@@ -643,7 +647,7 @@ class JWTAttacks:
                 # Send the modified request
                 self.request_text.delete("1.0", tk.END)
                 self.request_text.insert("1.0", modified_request)
-                self.process_request()
+                self.http_request_tool.process_request()
                 
                 # Get the response status code from the response text
                 response_text = self.response_text.get("1.0", tk.END)
@@ -903,7 +907,7 @@ Payload:
                     # Add continue button
                     def continue_attack():
                         debug_window.destroy()
-                        self.process_request()
+                        self.http_request_tool.process_request()
                     
                     continue_button = ttk.Button(debug_window, text="Continue Attack", command=continue_attack)
                     continue_button.pack(pady=10)
@@ -1029,7 +1033,7 @@ Payload:
                         # Add continue button
                         def continue_attack():
                             debug_window.destroy()
-                            self.process_request()
+                            self.http_request_tool.process_request()
                         
                         continue_button = ttk.Button(debug_window, text="Continue Attack", command=continue_attack)
                         continue_button.pack(pady=10)
@@ -1248,7 +1252,7 @@ Attack Details:
                             # Send the modified request
                             self.request_text.delete("1.0", tk.END)
                             self.request_text.insert("1.0", modified_request)
-                            self.process_request()
+                            self.http_request_tool.process_request()
                         
                         continue_button = ttk.Button(debug_window, text="Continue Attack", command=continue_attack)
                         continue_button.pack(pady=10)
