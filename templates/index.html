@@ -552,14 +552,16 @@
                         .then(data => {
                             const output = document.getElementById('bruteForceOutput');
                             if (data.error) {
-                                output.textContent = `Error: ${data.error}\nDetails: ${data.details}`;
+                                output.textContent = `Error: ${data.error}\nDetails: ${data.details || 'No additional details available'}`;
+                                if (data.output && data.output.length > 0) {
+                                    output.textContent += '\n\nHashcat Output:\n' + data.output.join('\n');
+                                }
+                                clearInterval(outputInterval);
+                            } else if (data.success) {
+                                output.textContent = `Success! Found secret: ${data.secret}\n\nHashcat Output:\n${data.output.join('\n')}`;
                                 clearInterval(outputInterval);
                             } else if (data.output) {
                                 output.textContent = data.output.join('\n');
-                                if (data.success) {
-                                    clearInterval(outputInterval);
-                                    output.textContent += `\n\nSuccess! Found secret: ${data.secret}`;
-                                }
                             }
                         })
                         .catch(error => {

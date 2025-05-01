@@ -527,128 +527,86 @@ class JWTAttacks:
 
     def brute_force_secret(self, token):
         try:
-            # First check if hashcat is installed
-            try:
-                # On Windows, we need to use the full path or check PATH
-                if os.name == 'nt':  # Windows
-                    try:
-                        subprocess.run(['where', 'hashcat'], capture_output=True, check=True)
-                    except subprocess.CalledProcessError:
-                        return {
-                            "success": False,
-                            "error": "hashcat is not installed or not in PATH",
-                            "details": "Please install hashcat and add it to your PATH, or use the full path to hashcat.exe"
-                        }
-                else:
-                    subprocess.run(['hashcat', '--version'], capture_output=True, check=True)
-            except (subprocess.SubprocessError, FileNotFoundError):
+            # Validate token format
+            if not token or '.' not in token:
                 return {
                     "success": False,
-                    "error": "hashcat is not installed. Please install hashcat to use this feature.",
-                    "details": "hashcat is required for brute force attacks. Please install it from https://hashcat.net/hashcat/"
+                    "error": "Invalid JWT token format",
+                    "details": "The token must be a valid JWT with at least two parts separated by dots",
+                    "output": []
                 }
 
-            # Create a temporary file for the JWT
-            temp_file = 'temp_jwt.txt'
+            # Save token to temp file for hashcat
+            temp_file = 'token.txt'
             with open(temp_file, 'w') as f:
                 f.write(token)
 
-            # Get absolute path to secrets file
-            secrets_path = os.path.abspath('jwt_secrets/jwt.secrets.list')
-            if not os.path.exists(secrets_path):
+            # Verify wordlist exists and has content
+            wordlist_path = 'jwt_secrets/jwt.secrets.list'
+            if not os.path.exists(wordlist_path):
                 return {
                     "success": False,
-                    "error": f"Secrets file not found at {secrets_path}",
-                    "details": "Please ensure the jwt_secrets folder exists with jwt.secrets.list file"
+                    "error": "Wordlist not found",
+                    "details": f"Wordlist file not found at {wordlist_path}",
+                    "output": []
                 }
 
-            # On Windows, we need to use the full path to hashcat
-            hashcat_cmd = ['hashcat']
-            if os.name == 'nt':  # Windows
-                try:
-                    # Try to find hashcat in PATH
-                    where_output = subprocess.run(['where', 'hashcat'], capture_output=True, text=True)
-                    if where_output.returncode == 0:
-                        hashcat_path = where_output.stdout.split('\n')[0].strip()
-                        hashcat_cmd = [hashcat_path]
-                except:
-                    pass
+            wordlist_size = os.path.getsize(wordlist_path)
+            if wordlist_size == 0:
+                return {
+                    "success": False,
+                    "error": "Empty wordlist",
+                    "details": "The wordlist file is empty",
+                    "output": []
+                }
 
-            # Add the rest of the command
-            hashcat_cmd.extend([
-                '-a', '0',  # Dictionary attack mode
-                '-m', '16500',  # JWT mode
+            # Run hashcat with jwt.secrets.list wordlist
+            cmd = [
+                'hashcat',
+                '-a', '0', # Straight attack mode
+                '-m', '16500', # JWT hash mode
+                '--force', # Ignore warnings
+                '--potfile-disable', # Don't use potfile
                 temp_file,
-                secrets_path
-            ])
+                wordlist_path
+            ]
 
-            # Run hashcat with proper formatting and wordlist
-            result = subprocess.run(
-                hashcat_cmd,
-                capture_output=True,
-                text=True,
-                timeout=30  # Add a timeout to prevent hanging
-            )
+            # Print debug info
+            debug_info = [
+                f"Token: {token}",
+                f"Token length: {len(token)}",
+                f"Wordlist path: {wordlist_path}",
+                f"Wordlist size: {wordlist_size} bytes",
+                f"Command: {' '.join(cmd)}"
+            ]
 
-            # Clean up
-            try:
+            process = subprocess.run(cmd, capture_output=True, text=True)
+
+            # Clean up temp file
+            if os.path.exists(temp_file):
                 os.remove(temp_file)
-            except:
-                pass
 
-            # Process the output
-            output = []
-            if result.stdout:
-                output.extend(result.stdout.split('\n'))
-            if result.stderr:
-                output.extend(result.stderr.split('\n'))
-
-            # Clean the output
-            cleaned_output = []
-            for line in output:
-                if line.strip():  # Only include non-empty lines
-                    # Remove ANSI codes
-                    line = re.sub(r'\033\[[0-9;]*m', '', line)
-                    cleaned_output.append(line)
-
-            # Add debug information about the wordlist and token
-            cleaned_output.insert(0, f"Using wordlist: {secrets_path}")
-            cleaned_output.insert(1, f"Wordlist size: {os.path.getsize(secrets_path)} bytes")
-            cleaned_output.insert(2, f"JWT token: {token}")
-            cleaned_output.insert(3, f"Hashcat command: {' '.join(hashcat_cmd)}")
-
-            # Parse the output to find the secret
-            if result.stdout:
-                # Look for the JWT in the output
-                for line in result.stdout.split('\n'):
-                    if token in line:
-                        # The secret should be after the JWT
-                        parts = line.split(':')
-                        if len(parts) > 1:
-                            secret = parts[-1].strip()
-                            if secret and secret != token:  # Make sure we found an actual secret
-                                return {
-                                    "success": True,
-                                    "secret": secret,
-                                    "details": f"Found secret key: {secret}",
-                                    "output": cleaned_output
-                                }
+            # Check if hashcat found a match
+            if process.returncode == 0 or 'Cracked' in process.stdout:
+                # Parse hashcat output to get cracked secret
+                for line in process.stdout.split('\n'):
+                    if ':' in line and not line.startswith('#'):
+                        secret = line.split(':')[-1].strip()
+                        return {
+                            "success": True,
+                            "secret": secret,
+                            "details": f"Found matching secret key: {secret}",
+                            "output": debug_info + process.stdout.split('\n')
+                        }
 
             # If we get here, no secret was found
             return {
                 "success": False,
-                "error": "No secret key found in the dictionary",
-                "details": "The secret key was not found in the provided wordlist",
-                "output": cleaned_output
+                "error": "No matching secret found in wordlist",
+                "details": "The secret key was not found in the provided wordlist. Please check if the wordlist contains the correct secret.",
+                "output": debug_info + process.stdout.split('\n') + process.stderr.split('\n')
             }
 
-        except subprocess.TimeoutExpired:
-            return {
-                "success": False,
-                "error": "Hashcat operation timed out",
-                "details": "The brute force attack took too long to complete",
-                "output": ["Operation timed out after 30 seconds"]
-            }
         except Exception as e:
             return {
                 "success": False,
