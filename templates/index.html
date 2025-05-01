@@ -238,6 +238,11 @@
         // Auto-detect JWTs in request text
         document.getElementById('requestText').addEventListener('input', function() {
             const requestText = this.value;
+            if (!requestText.trim()) {
+                document.getElementById('jwtText').textContent = 'No JWT tokens found in request';
+                return;
+            }
+            
             fetch('/find_jwt', {
                 method: 'POST',
                 headers: {
@@ -263,13 +268,23 @@
                         })
                         .then(response => response.json())
                         .then(decodedData => {
-                            decodedText += `JWT #${index + 1}:\n${decodedData.decoded}\n\n`;
-                            document.getElementById('jwtText').textContent = decodedText;
+                            if (decodedData.decoded) {
+                                decodedText += `JWT #${index + 1}:\n${decodedData.decoded}\n\n`;
+                                document.getElementById('jwtText').textContent = decodedText;
+                            } else {
+                                document.getElementById('jwtText').textContent = 'Error decoding JWT';
+                            }
+                        })
+                        .catch(error => {
+                            document.getElementById('jwtText').textContent = 'Error decoding JWT';
                         });
                     });
                 } else {
                     document.getElementById('jwtText').textContent = 'No JWT tokens found in request';
                 }
+            })
+            .catch(error => {
+                document.getElementById('jwtText').textContent = 'Error finding JWT tokens';
             });
         });
 
@@ -447,6 +462,11 @@
                 return;
             }
 
+            // Get proxy settings
+            const useProxy = document.getElementById('useProxy').checked;
+            const proxyAddress = document.getElementById('proxyAddress').value;
+            const verifyCert = document.getElementById('verifyCert').checked;
+
             // Find JWT tokens in the request
             fetch('/find_jwt', {
                 method: 'POST',
@@ -533,7 +553,11 @@
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        token: originalToken
+                        token: originalToken,
+                        request_text: requestText,
+                        use_proxy: useProxy,
+                        proxy_address: proxyAddress,
+                        verify_cert: verifyCert
                     })
                 })
                 .then(response => {
@@ -569,8 +593,16 @@
                             alert(message);
                         } else {
                             message += `Success: ${data.success}\n`;
+                            if (data.all_results && selectedAttack === 'none_sig') {
+                                message += '\nAttempted variations:\n';
+                                data.all_results.forEach(result => {
+                                    message += `\n${result.variation}:\n`;
+                                    message += `Status Code: ${result.status_code}\n`;
+                                    message += `Success: ${result.success ? 'Yes' : 'No'}\n`;
+                                });
+                            }
                             if (data.modified_token) {
-                                message += `Modified Token: ${data.modified_token}\n`;
+                                message += `\nModified Token: ${data.modified_token}\n`;
                                 // Update the request with the modified token
                                 const newRequestText = requestText.replace(originalToken, data.modified_token);
                                 document.getElementById('requestText').value = newRequestText;
@@ -586,11 +618,13 @@
                                 })
                                 .then(response => response.json())
                                 .then(decodedData => {
-                                    document.getElementById('jwtText').textContent = decodedData.decoded;
+                                    if (decodedData.decoded) {
+                                        document.getElementById('jwtText').textContent = decodedData.decoded;
+                                    }
                                 });
                             }
                             if (data.details) {
-                                message += `Details: ${data.details}`;
+                                message += `\nDetails: ${data.details}`;
                             }
                             alert(message);
                         }
