@@ -18,7 +18,8 @@ class HTTPRequestTool:
     def __init__(self, root):
         self.root = root
         self.jwt_attacks = JWTAttacks(self.root, self)  # Pass self to JWTAttacks
-        self.tools = Tools(self.root)
+        self.tools = Tools(self.root, self)
+        self.third_party_analysis = Third_Party_Analysis(self.root, self)  # Initialize Third_Party_Analysis
         
         # Initialize UI elements first
         self.setup_ui()
@@ -43,7 +44,18 @@ class HTTPRequestTool:
             self.request_headers,
             self.response_headers
         )
-        
+
+        # Set UI elements for Third_Party_Analysis
+        self.third_party_analysis.set_ui_elements(
+            self.request_text,
+            self.response_text,
+            self.use_proxy,
+            self.proxy_address,
+            self.verify_cert,
+            self.request_headers,
+            self.response_headers
+        )
+
     def setup_ui(self):
         self.root.title("HTTP Request Tool")
         self.root.geometry("1200x800")
@@ -150,7 +162,7 @@ class HTTPRequestTool:
         self.clickjack_button.pack(side=tk.LEFT, padx=5)
         
         # TestSSL button
-        self.testssl_button = ttk.Button(button_frame, text="Run TestSSL", command=self.tools.run_testssl)
+        self.testssl_button = ttk.Button(button_frame, text="Run TestSSL", command=self.third_party_analysis.run_testssl)
         self.testssl_button.pack(side=tk.LEFT, padx=5)
         
         # Add Check for Common Files button
@@ -185,7 +197,7 @@ class HTTPRequestTool:
         self.cert_check.pack(side=tk.LEFT, padx=5)
         
         # Add Wayback Machine button
-        self.wayback_button = ttk.Button(button_frame, text="Wayback Machine", command=self.tools.search_wayback_machine)
+        self.wayback_button = ttk.Button(button_frame, text="Wayback Machine", command=self.third_party_analysis.search_wayback_machine)
         self.wayback_button.pack(side=tk.LEFT, padx=5)
 
     def copy_response(self):
@@ -1444,7 +1456,7 @@ Attack Details:
             return
 
 class Tools:
-    def __init__(self, root):
+    def __init__(self, root, http_request_tool):
         self.root = root
         self.request_text = None
         self.response_text = None
@@ -1453,6 +1465,7 @@ class Tools:
         self.verify_cert = None
         self.request_headers = None
         self.response_headers = None
+        self.http_request_tool = http_request_tool
         
         # Load common files from common_files.txt
         try:
@@ -1518,95 +1531,6 @@ class Tools:
 </html>"""
             self.response_text.delete("1.0", tk.END)
             self.response_text.insert("1.0", clickjack_html)
-
-
-    def run_testssl(self):
-        domain = simpledialog.askstring("TestSSL", "Enter domain to test:")
-        if domain:
-            try:
-                # Create a new window for testssl output
-                testssl_window = tk.Toplevel(self.root)
-                testssl_window.title(f"TestSSL Results - {domain}")
-                testssl_window.geometry("800x600")
-                
-                # Create a text widget for output
-                output_text = tk.Text(testssl_window, wrap=tk.WORD, font=('Courier', 10))
-                output_text.pack(fill=tk.BOTH, expand=True)
-                
-                # Create a scrollbar
-                scrollbar = tk.Scrollbar(output_text)
-                scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-                output_text.config(yscrollcommand=scrollbar.set)
-                scrollbar.config(command=output_text.yview)
-                
-                # Add initial message
-                output_text.insert(tk.END, f"Starting TestSSL scan for {domain}...\n\n")
-                
-                def process_line(line):
-                    # Remove any ANSI codes
-                    line = re.sub(r'\033\[[0-9;]*m', '', line)
-                    output_text.insert(tk.END, line + '\n')
-                
-                def run_testssl_thread():
-                    try:
-                        # Store current directory
-                        current_dir = os.getcwd()
-                        
-                        # Change to testssl directory
-                        os.chdir('testssl')
-                        
-                        # Make sure testssl.sh is executable
-                        os.chmod('testssl.sh', 0o755)
-                        
-                        # Run testssl.sh with HTML output using system OpenSSL
-                        process = subprocess.Popen(
-                            ['./testssl.sh', '--html', domain],
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE,
-                            text=True,
-                            bufsize=1,
-                            universal_newlines=True
-                        )
-                        
-                        # Read output in real-time
-                        while True:
-                            output = process.stdout.readline()
-                            if output == '' and process.poll() is not None:
-                                break
-                            if output:
-                                # Process and display the line
-                                self.root.after(0, lambda line=output: process_line(line))
-                                self.root.after(0, lambda: output_text.see(tk.END))
-                        
-                        # Get any remaining output
-                        stdout, stderr = process.communicate()
-                        
-                        # Change back to original directory
-                        os.chdir(current_dir)
-                        
-                        # Update the text widget with any remaining output
-                        if stdout:
-                            for line in stdout.splitlines():
-                                self.root.after(0, lambda line=line: process_line(line))
-                        if stderr:
-                            output_text.insert(tk.END, "\n\nErrors:\n")
-                            for line in stderr.splitlines():
-                                self.root.after(0, lambda line=line: process_line(line))
-                        
-                        # Show completion message
-                        self.root.after(0, lambda: messagebox.showinfo("TestSSL", f"TestSSL scan completed for {domain}, file can be found in testssl folder."))
-                        
-                    except Exception as e:
-                        # Make sure we change back to original directory even if there's an error
-                        os.chdir(current_dir)
-                        self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to run TestSSL: {str(e)}"))
-                
-                # Start the testssl process in a separate thread
-                import threading
-                threading.Thread(target=run_testssl_thread, daemon=True).start()
-                
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to start TestSSL: {str(e)}")
 
 
     def check_common_files(self):
@@ -2200,6 +2124,241 @@ class Tools:
             # Configure highlight tag
             trace_text.tag_configure('highlight', background='#ffcccc', foreground='black')
 
+    def analyze_headers(self):
+        # Create a new window for headers analysis
+        headers_window = tk.Toplevel(self.root)
+        headers_window.title("Header Analysis")
+        headers_window.geometry("800x600")
+        
+        # Create main frame
+        main_frame = ttk.Frame(headers_window)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Create notebook for tabs
+        notebook = ttk.Notebook(main_frame)
+        notebook.pack(fill=tk.BOTH, expand=True)
+        
+        # Request Headers Tab
+        request_frame = ttk.Frame(notebook)
+        notebook.add(request_frame, text="Request Headers")
+        
+        # Response Headers Tab
+        response_frame = ttk.Frame(notebook)
+        notebook.add(response_frame, text="Response Headers")
+        
+        # Get request text
+        request_text = self.request_text.get("1.0", tk.END).strip()
+        
+        if not request_text:
+            # Create empty tree for request headers
+            request_tree = ttk.Treeview(request_frame, columns=("Value"), show="tree")
+            request_tree.heading("#0", text="Header")
+            request_tree.heading("Value", text="Value")
+            request_tree.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+            
+            # Add scrollbar
+            scrollbar = ttk.Scrollbar(request_tree)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            request_tree.config(yscrollcommand=scrollbar.set)
+            scrollbar.config(command=request_tree.yview)
+            
+            request_tree.insert("", tk.END, text="No Headers", values=("No request headers to analyze"))
+        else:
+            # Parse request headers
+            request_headers = {}
+            request_lines = request_text.split('\n')
+            
+            # Skip the first line (request line)
+            for line in request_lines[1:]:
+                # Stop if we hit an empty line (end of headers)
+                if not line.strip():
+                    break
+                if ':' in line:
+                    key, value = line.split(':', 1)
+                    request_headers[key.strip()] = value.strip()
+            
+            # Create tree for request headers
+            request_tree = ttk.Treeview(request_frame, columns=("Value"), show="tree")
+            request_tree.heading("#0", text="Header")
+            request_tree.heading("Value", text="Value")
+            request_tree.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+            
+            # Add scrollbar
+            scrollbar = ttk.Scrollbar(request_tree)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            request_tree.config(yscrollcommand=scrollbar.set)
+            scrollbar.config(command=request_tree.yview)
+            
+            # Add request headers to tree
+            for header, value in request_headers.items():
+                header_item = request_tree.insert("", tk.END, text=header)
+                request_tree.insert(header_item, tk.END, text=f"Value:                   {value}")
+                # Case-insensitive lookup in request headers
+                header_lower = header.lower()
+                description = next((self.request_headers[k] for k in self.request_headers if k.lower() == header_lower), "Custom header")
+                request_tree.insert(header_item, tk.END, text=f"Description:        {description}")
+        
+        # Get response text
+        response_text = self.response_text.get("1.0", tk.END).strip()
+        
+        if not response_text:
+            # Create empty tree for response headers
+            response_tree = ttk.Treeview(response_frame, columns=("Value"), show="tree")
+            response_tree.heading("#0", text="Header")
+            response_tree.heading("Value", text="Value")
+            response_tree.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+            
+            # Add scrollbar
+            scrollbar = ttk.Scrollbar(response_tree)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            response_tree.config(yscrollcommand=scrollbar.set)
+            scrollbar.config(command=response_tree.yview)
+            
+            response_tree.insert("", tk.END, text="No Headers", values=("No response headers to analyze"))
+        else:
+            # Parse response headers
+            response_headers = {}
+            response_lines = response_text.split('\n')
+            
+            # Skip the first line (status line)
+            for line in response_lines[1:]:
+                # Stop if we hit an empty line (end of headers)
+                if not line.strip():
+                    break
+                if ':' in line:
+                    key, value = line.split(':', 1)
+                    response_headers[key.strip()] = value.strip()
+            
+            # Create tree for response headers
+            response_tree = ttk.Treeview(response_frame, columns=("Value"), show="tree")
+            response_tree.heading("#0", text="Header")
+            response_tree.heading("Value", text="Value")
+            response_tree.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+            
+            # Add scrollbar
+            scrollbar = ttk.Scrollbar(response_tree)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            response_tree.config(yscrollcommand=scrollbar.set)
+            scrollbar.config(command=response_tree.yview)
+            
+            # Add response headers to tree
+            for header, value in response_headers.items():
+                header_item = response_tree.insert("", tk.END, text=header)
+                response_tree.insert(header_item, tk.END, text=f"Value:                  {value}")
+                # Case-insensitive lookup in response headers
+                header_lower = header.lower()
+                description = next((self.response_headers[k] for k in self.response_headers if k.lower() == header_lower), "Custom header")
+                response_tree.insert(header_item, tk.END, text=f"Description:        {description}")
+
+class Third_Party_Analysis:
+    def __init__(self, root, http_request_tool):
+        self.root = root
+        self.request_text = None
+        self.response_text = None
+        self.use_proxy = None
+        self.proxy_address = None
+        self.verify_cert = None
+        self.request_headers = None
+        self.response_headers = None
+        self.http_request_tool = http_request_tool
+    
+    def set_ui_elements(self, request_text, response_text, use_proxy, proxy_address, verify_cert, request_headers, response_headers):
+        self.request_text = request_text
+        self.response_text = response_text
+        self.use_proxy = use_proxy
+        self.proxy_address = proxy_address
+        self.verify_cert = verify_cert
+        self.request_headers = request_headers
+        self.response_headers = response_headers
+    
+    def run_testssl(self):
+        domain = simpledialog.askstring("TestSSL", "Enter domain to test:")
+        if domain:
+            try:
+                # Create a new window for testssl output
+                testssl_window = tk.Toplevel(self.root)
+                testssl_window.title(f"TestSSL Results - {domain}")
+                testssl_window.geometry("800x600")
+                
+                # Create a text widget for output
+                output_text = tk.Text(testssl_window, wrap=tk.WORD, font=('Courier', 10))
+                output_text.pack(fill=tk.BOTH, expand=True)
+                
+                # Create a scrollbar
+                scrollbar = tk.Scrollbar(output_text)
+                scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+                output_text.config(yscrollcommand=scrollbar.set)
+                scrollbar.config(command=output_text.yview)
+                
+                # Add initial message
+                output_text.insert(tk.END, f"Starting TestSSL scan for {domain}...\n\n")
+                
+                def process_line(line):
+                    # Remove any ANSI codes
+                    line = re.sub(r'\033\[[0-9;]*m', '', line)
+                    output_text.insert(tk.END, line + '\n')
+                
+                def run_testssl_thread():
+                    try:
+                        # Store current directory
+                        current_dir = os.getcwd()
+                        
+                        # Change to testssl directory
+                        os.chdir('testssl')
+                        
+                        # Make sure testssl.sh is executable
+                        os.chmod('testssl.sh', 0o755)
+                        
+                        # Run testssl.sh with HTML output using system OpenSSL
+                        process = subprocess.Popen(
+                            ['./testssl.sh', '--html', domain],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            text=True,
+                            bufsize=1,
+                            universal_newlines=True
+                        )
+                        
+                        # Read output in real-time
+                        while True:
+                            output = process.stdout.readline()
+                            if output == '' and process.poll() is not None:
+                                break
+                            if output:
+                                # Process and display the line
+                                self.root.after(0, lambda line=output: process_line(line))
+                                self.root.after(0, lambda: output_text.see(tk.END))
+                        
+                        # Get any remaining output
+                        stdout, stderr = process.communicate()
+                        
+                        # Change back to original directory
+                        os.chdir(current_dir)
+                        
+                        # Update the text widget with any remaining output
+                        if stdout:
+                            for line in stdout.splitlines():
+                                self.root.after(0, lambda line=line: process_line(line))
+                        if stderr:
+                            output_text.insert(tk.END, "\n\nErrors:\n")
+                            for line in stderr.splitlines():
+                                self.root.after(0, lambda line=line: process_line(line))
+                        
+                        # Show completion message
+                        self.root.after(0, lambda: messagebox.showinfo("TestSSL", f"TestSSL scan completed for {domain}, file can be found in testssl folder."))
+                        
+                    except Exception as e:
+                        # Make sure we change back to original directory even if there's an error
+                        os.chdir(current_dir)
+                        self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to run TestSSL: {str(e)}"))
+                
+                # Start the testssl process in a separate thread
+                import threading
+                threading.Thread(target=run_testssl_thread, daemon=True).start()
+                
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to start TestSSL: {str(e)}")
+
     def search_wayback_machine(self):
         # Create a new window for Wayback Machine search
         wayback_window = tk.Toplevel(self.root)
@@ -2411,132 +2570,6 @@ class Tools:
         # Add search button
         search_button = ttk.Button(input_frame, text="Search", command=search)
         search_button.pack(side=tk.LEFT, padx=5)
-
-    def analyze_headers(self):
-        # Create a new window for headers analysis
-        headers_window = tk.Toplevel(self.root)
-        headers_window.title("Header Analysis")
-        headers_window.geometry("800x600")
-        
-        # Create main frame
-        main_frame = ttk.Frame(headers_window)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        # Create notebook for tabs
-        notebook = ttk.Notebook(main_frame)
-        notebook.pack(fill=tk.BOTH, expand=True)
-        
-        # Request Headers Tab
-        request_frame = ttk.Frame(notebook)
-        notebook.add(request_frame, text="Request Headers")
-        
-        # Response Headers Tab
-        response_frame = ttk.Frame(notebook)
-        notebook.add(response_frame, text="Response Headers")
-        
-        # Get request text
-        request_text = self.request_text.get("1.0", tk.END).strip()
-        
-        if not request_text:
-            # Create empty tree for request headers
-            request_tree = ttk.Treeview(request_frame, columns=("Value"), show="tree")
-            request_tree.heading("#0", text="Header")
-            request_tree.heading("Value", text="Value")
-            request_tree.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-            
-            # Add scrollbar
-            scrollbar = ttk.Scrollbar(request_tree)
-            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-            request_tree.config(yscrollcommand=scrollbar.set)
-            scrollbar.config(command=request_tree.yview)
-            
-            request_tree.insert("", tk.END, text="No Headers", values=("No request headers to analyze"))
-        else:
-            # Parse request headers
-            request_headers = {}
-            request_lines = request_text.split('\n')
-            
-            # Skip the first line (request line)
-            for line in request_lines[1:]:
-                # Stop if we hit an empty line (end of headers)
-                if not line.strip():
-                    break
-                if ':' in line:
-                    key, value = line.split(':', 1)
-                    request_headers[key.strip()] = value.strip()
-            
-            # Create tree for request headers
-            request_tree = ttk.Treeview(request_frame, columns=("Value"), show="tree")
-            request_tree.heading("#0", text="Header")
-            request_tree.heading("Value", text="Value")
-            request_tree.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-            
-            # Add scrollbar
-            scrollbar = ttk.Scrollbar(request_tree)
-            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-            request_tree.config(yscrollcommand=scrollbar.set)
-            scrollbar.config(command=request_tree.yview)
-            
-            # Add request headers to tree
-            for header, value in request_headers.items():
-                header_item = request_tree.insert("", tk.END, text=header)
-                request_tree.insert(header_item, tk.END, text=f"Value:                   {value}")
-                # Case-insensitive lookup in request headers
-                header_lower = header.lower()
-                description = next((self.request_headers[k] for k in self.request_headers if k.lower() == header_lower), "Custom header")
-                request_tree.insert(header_item, tk.END, text=f"Description:        {description}")
-        
-        # Get response text
-        response_text = self.response_text.get("1.0", tk.END).strip()
-        
-        if not response_text:
-            # Create empty tree for response headers
-            response_tree = ttk.Treeview(response_frame, columns=("Value"), show="tree")
-            response_tree.heading("#0", text="Header")
-            response_tree.heading("Value", text="Value")
-            response_tree.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-            
-            # Add scrollbar
-            scrollbar = ttk.Scrollbar(response_tree)
-            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-            response_tree.config(yscrollcommand=scrollbar.set)
-            scrollbar.config(command=response_tree.yview)
-            
-            response_tree.insert("", tk.END, text="No Headers", values=("No response headers to analyze"))
-        else:
-            # Parse response headers
-            response_headers = {}
-            response_lines = response_text.split('\n')
-            
-            # Skip the first line (status line)
-            for line in response_lines[1:]:
-                # Stop if we hit an empty line (end of headers)
-                if not line.strip():
-                    break
-                if ':' in line:
-                    key, value = line.split(':', 1)
-                    response_headers[key.strip()] = value.strip()
-            
-            # Create tree for response headers
-            response_tree = ttk.Treeview(response_frame, columns=("Value"), show="tree")
-            response_tree.heading("#0", text="Header")
-            response_tree.heading("Value", text="Value")
-            response_tree.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-            
-            # Add scrollbar
-            scrollbar = ttk.Scrollbar(response_tree)
-            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-            response_tree.config(yscrollcommand=scrollbar.set)
-            scrollbar.config(command=response_tree.yview)
-            
-            # Add response headers to tree
-            for header, value in response_headers.items():
-                header_item = response_tree.insert("", tk.END, text=header)
-                response_tree.insert(header_item, tk.END, text=f"Value:                  {value}")
-                # Case-insensitive lookup in response headers
-                header_lower = header.lower()
-                description = next((self.response_headers[k] for k in self.response_headers if k.lower() == header_lower), "Custom header")
-                response_tree.insert(header_item, tk.END, text=f"Description:        {description}")
 
 def main():
     root = tk.Tk()
