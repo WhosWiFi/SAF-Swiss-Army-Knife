@@ -80,7 +80,7 @@ class HTTPRequestTool:
         
         # Load header information from JSON file
         try:
-            with open('http_headers.json', 'r') as f:
+            with open('http_headers.json', 'r', encoding='utf-8') as f:
                 header_data = json.load(f)
                 self.request_headers = header_data['request_headers']
                 self.response_headers = header_data['response_headers']
@@ -1498,7 +1498,7 @@ class Tools:
         
         # Load common files from common_files.txt
         try:
-            with open('common_files.txt', 'r') as f:
+            with open('common_files.txt', 'r', encoding='utf-8') as f:
                 self.common_files = [line.strip() for line in f if line.strip()]
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load common files: {str(e)}")
