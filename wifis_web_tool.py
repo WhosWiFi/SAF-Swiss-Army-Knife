@@ -307,20 +307,35 @@ class JWTAttacks:
 
     def encode_jwt(self, header, payload, signature=None):
         try:
-            # Encode header and payload
+            # Encode header and payload as JSON with no extra whitespace
+            header_json = json.dumps(header, separators=(',', ':'))
+            payload_json = json.dumps(payload, separators=(',', ':'))
+
+            # Base64url encode the JSON strings
+            # First encode to bytes, then base64url encode, then decode to string
+            # Remove padding characters (=) as per RFC 7519
             encoded_header = base64.urlsafe_b64encode(
-                json.dumps(header).encode('utf-8')
+                header_json.encode('utf-8')
             ).decode('utf-8').rstrip('=')
 
             encoded_payload = base64.urlsafe_b64encode(
-                json.dumps(payload).encode('utf-8')
+                payload_json.encode('utf-8')
             ).decode('utf-8').rstrip('=')
 
-            # Construct the token
+            # Construct the token parts
             token_parts = [encoded_header, encoded_payload]
-            if signature:
-                token_parts.append(signature)
 
+            # For unsigned tokens (none algorithm), add empty signature
+            if signature is None:
+                token_parts.append('')
+            else:
+                # For signed tokens, encode the signature
+                encoded_signature = base64.urlsafe_b64encode(
+                    signature.encode('utf-8')
+                ).decode('utf-8').rstrip('=')
+                token_parts.append(encoded_signature)
+
+            # Join parts with period character
             return '.'.join(token_parts)
         except Exception as e:
             return f"Error encoding JWT: {str(e)}"
@@ -795,12 +810,8 @@ class JWTAttacks:
                 # Use the algorithm from the header or default to HS256
                 algorithm = header.get('alg', 'HS256')
                 
-                # Check if algorithm uses a secret key
-                if algorithm not in ['HS256', 'HS384', 'HS512']:
-                    return {"error": f"Algorithm {algorithm} does not use a secret key for signing. Only HS256, HS384, and HS512 are supported for secret key signing."}
-                
                 try:
-                    # Create the token using the correct method
+                    # Create the token using PyJWT for signed tokens
                     encoded_token = jwt.encode(
                         payload=payload,
                         key=secret,
@@ -810,19 +821,9 @@ class JWTAttacks:
                 except Exception as e:
                     return {"error": f"Failed to encode JWT with secret: {str(e)}"}
             else:
-                # For unsigned tokens, use the algorithm from the header or 'none'
-                algorithm = header.get('alg', 'none')
-                if algorithm not in ['none', 'HS256', 'HS384', 'HS512']:
-                    algorithm = 'none'
-                
                 try:
-                    # Create the token using the correct method
-                    encoded_token = jwt.encode(
-                        payload=payload,
-                        key='',
-                        algorithm=algorithm,
-                        headers=header
-                    )
+                    # For unsigned tokens, use our own encoding method
+                    encoded_token = self.encode_jwt(header, payload)
                 except Exception as e:
                     return {"error": f"Failed to encode unsigned JWT: {str(e)}"}
 
