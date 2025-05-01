@@ -58,7 +58,25 @@ class HTTPRequestTool:
 
     def setup_ui(self):
         self.root.title("HTTP Request Tool")
-        self.root.geometry("1200x800")
+        # Get screen dimensions
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        
+        # Set window size to 90% of screen size
+        window_width = int(screen_width * 0.9)
+        window_height = int(screen_height * 0.9)
+        
+        # Calculate position to center the window
+        x_position = (screen_width - window_width) // 2
+        y_position = (screen_height - window_height) // 2
+        
+        # Set window geometry
+        self.root.geometry(f"{window_width}x{window_height}+{x_position}+{y_position}")
+        
+        # Set minimum window size to 80% of screen size
+        min_width = int(screen_width * 0.8)
+        min_height = int(screen_height * 0.8)
+        self.root.minsize(min_width, min_height)
         
         # Load header information from JSON file
         try:
@@ -70,9 +88,6 @@ class HTTPRequestTool:
             messagebox.showerror("Error", f"Failed to load header information: {str(e)}")
             self.request_headers = {}
             self.response_headers = {}
-        
-        # Set minimum window size
-        self.root.minsize(1200, 800)
         
         # Create main paned window
         self.paned = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
@@ -152,31 +167,7 @@ class HTTPRequestTool:
         # Send button
         self.send_button = ttk.Button(button_frame, text="Send Request", command=self.process_request)
         self.send_button.pack(side=tk.LEFT, padx=5)
-        
-        # JWT Attacks button
-        self.jwt_attacks_button = ttk.Button(button_frame, text="JWT Attacks", command=self.jwt_attacks.show_jwt_attacks_menu)
-        self.jwt_attacks_button.pack(side=tk.LEFT, padx=5)
-        
-        # Clickjack button
-        self.clickjack_button = ttk.Button(button_frame, text="Generate Clickjack", command=self.tools.generate_clickjack)
-        self.clickjack_button.pack(side=tk.LEFT, padx=5)
-        
-        # TestSSL button
-        self.testssl_button = ttk.Button(button_frame, text="Run TestSSL", command=self.third_party_analysis.run_testssl)
-        self.testssl_button.pack(side=tk.LEFT, padx=5)
-        
-        # Add Check for Common Files button
-        self.check_files_button = ttk.Button(button_frame, text="Check for Common Files", command=self.tools.check_common_files)
-        self.check_files_button.pack(side=tk.LEFT, padx=5)
-        
-        # Add Analyze Static File button
-        self.analyze_static_button = ttk.Button(button_frame, text="Analyze Static File", command=self.tools.analyze_static_file)
-        self.analyze_static_button.pack(side=tk.LEFT, padx=5)
-        
-        # Add Analyze Headers button
-        self.analyze_headers_button = ttk.Button(button_frame, text="Analyze Headers", command=self.tools.analyze_headers)
-        self.analyze_headers_button.pack(side=tk.LEFT, padx=5)
-        
+
         # Add proxy configuration frame
         proxy_frame = ttk.Frame(self.request_frame)
         proxy_frame.pack(fill=tk.X, pady=5)
@@ -196,6 +187,33 @@ class HTTPRequestTool:
         self.cert_check = ttk.Checkbutton(proxy_frame, text="Verify Proxy Cert", variable=self.verify_cert)
         self.cert_check.pack(side=tk.LEFT, padx=5)
         
+        # JWT Attacks
+        # JWT Attacks button
+        self.jwt_attacks_button = ttk.Button(button_frame, text="JWT Attacks", command=self.jwt_attacks.show_jwt_attacks_menu)
+        self.jwt_attacks_button.pack(side=tk.LEFT, padx=5)
+        
+        #Tools
+        # Clickjack button
+        self.clickjack_button = ttk.Button(button_frame, text="Generate Clickjack", command=self.tools.generate_clickjack)
+        self.clickjack_button.pack(side=tk.LEFT, padx=5)
+        
+        # Add Check for Common Files button
+        self.check_files_button = ttk.Button(button_frame, text="Check for Common Files", command=self.tools.check_common_files)
+        self.check_files_button.pack(side=tk.LEFT, padx=5)
+        
+        # Add Analyze Static File button
+        self.analyze_static_button = ttk.Button(button_frame, text="Analyze Static File", command=self.tools.analyze_static_file)
+        self.analyze_static_button.pack(side=tk.LEFT, padx=5)
+        
+        # Add Analyze Headers button
+        self.analyze_headers_button = ttk.Button(button_frame, text="Analyze Headers", command=self.tools.analyze_headers)
+        self.analyze_headers_button.pack(side=tk.LEFT, padx=5)
+
+        # Third Party Analysis
+        # TestSSL button
+        self.testssl_button = ttk.Button(button_frame, text="Run TestSSL", command=self.third_party_analysis.run_testssl)
+        self.testssl_button.pack(side=tk.LEFT, padx=5)
+
         # Add Wayback Machine button
         self.wayback_button = ttk.Button(button_frame, text="Wayback Machine", command=self.third_party_analysis.search_wayback_machine)
         self.wayback_button.pack(side=tk.LEFT, padx=5)
