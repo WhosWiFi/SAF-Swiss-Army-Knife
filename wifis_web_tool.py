@@ -548,8 +548,19 @@ class JWTAttacks:
         # Load existing secrets if file exists
         secrets_path = 'jwt_secrets/jwt.secrets.list'
         if os.path.exists(secrets_path):
-            with open(secrets_path, 'r') as f:
-                secrets_text.insert("1.0", f.read())
+            try:
+                # Try UTF-8 first
+                with open(secrets_path, 'r', encoding='utf-8') as f:
+                    secrets_text.insert("1.0", f.read())
+            except UnicodeDecodeError:
+                try:
+                    # Try latin-1 if UTF-8 fails
+                    with open(secrets_path, 'r', encoding='latin-1') as f:
+                        secrets_text.insert("1.0", f.read())
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to read secrets file: {str(e)}")
+                    secrets_window.destroy()
+                    return
         else:
             messagebox.showerror("Error", f"Secrets file not found at {secrets_path}")
             secrets_window.destroy()
@@ -561,7 +572,7 @@ class JWTAttacks:
         
         def save_secrets():
             try:
-                with open(secrets_path, 'w') as f:
+                with open(secrets_path, 'w', encoding='utf-8') as f:
                     f.write(secrets_text.get("1.0", tk.END).strip())
                 messagebox.showinfo("Success", "Secrets list saved successfully")
             except Exception as e:
