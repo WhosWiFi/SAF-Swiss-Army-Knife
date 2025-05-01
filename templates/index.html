@@ -38,6 +38,47 @@
         .file-status.error i {
             color: #dc3545;
         }
+        .jwt-container {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .jwt-editor {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .editor-section {
+            flex: 1;
+        }
+        .editor-section h4 {
+            margin-bottom: 5px;
+        }
+        .json-editor {
+            width: 100%;
+            height: 200px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-family: monospace;
+            resize: vertical;
+        }
+        .jwt-options {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .jwt-preview {
+            flex: 1;
+            border: 1px solid #ccc;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        #jwt-preview-content {
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
     </style>
 </head>
 <body>
@@ -101,7 +142,7 @@
                 <div class="row">
                     <div class="col-md-6">
                         <h4>JWT Decoded</h4>
-                        <div id="jwtText" class="form-control monospace response-area"></div>
+                        <div id="jwtText" class="form-control monospace response-area" contenteditable="true"></div>
                         <div class="mt-3">
                             <div class="form-check">
                                 <input class="form-check-input" type="checkbox" id="useSecret">
@@ -111,36 +152,35 @@
                                 <input type="text" id="secretEntry" class="form-control" placeholder="Secret Key" disabled>
                             </div>
                         </div>
-                        <button class="btn btn-primary mt-3" onclick="editJWT()">Edit JWT</button>
+                        <button class="btn btn-primary mt-3" onclick="saveJWT()">Save JWT</button>
                     </div>
                     <div class="col-md-6">
-                        <h4>JWT Attacks</h4>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="unverifiedSig">
-                            <label class="form-check-label" for="unverifiedSig">Unverified Signature Attack</label>
+                        <h4>JWT Editor</h4>
+                        <div id="jwt-section" class="section" style="display: none;">
+                            <div class="jwt-container">
+                                <div class="jwt-editor">
+                                    <div class="editor-section">
+                                        <h5>Header</h5>
+                                        <textarea id="jwt-header" class="json-editor" placeholder="Enter JWT header JSON"></textarea>
+                                    </div>
+                                    <div class="editor-section">
+                                        <h5>Payload</h5>
+                                        <textarea id="jwt-payload" class="json-editor" placeholder="Enter JWT payload JSON"></textarea>
+                                    </div>
+                                    <div class="jwt-options">
+                                        <label>
+                                            <input type="checkbox" id="use-secret"> Use Secret Key
+                                        </label>
+                                        <input type="text" id="jwt-secret" placeholder="Enter secret key" style="display: none;">
+                                    </div>
+                                    <button onclick="saveJWT()">Save JWT</button>
+                                </div>
+                                <div class="jwt-preview">
+                                    <h5>Preview</h5>
+                                    <div id="jwt-preview-content"></div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="noneSig">
-                            <label class="form-check-label" for="noneSig">None Signature Attack</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="bruteForce">
-                            <label class="form-check-label" for="bruteForce">Brute Force Secret Key</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="jwkInjection">
-                            <label class="form-check-label" for="jwkInjection">JWK Header Injection</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="kidTraversal">
-                            <label class="form-check-label" for="kidTraversal">KID Header Path Traversal</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="algorithmConfusion">
-                            <label class="form-check-label" for="algorithmConfusion">Algorithm Confusion</label>
-                        </div>
-                        <button class="btn btn-primary mt-3" onclick="manageSecrets()">Manage Secrets List</button>
-                        <button class="btn btn-primary mt-3" onclick="runJWTAttacks()">Run Selected Attacks</button>
                     </div>
                 </div>
             </div>
@@ -198,7 +238,7 @@
         // Auto-detect JWTs in request text
         document.getElementById('requestText').addEventListener('input', function() {
             const requestText = this.value;
-            fetch('/process_request', {
+            fetch('/find_jwt', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -209,8 +249,26 @@
             })
             .then(response => response.json())
             .then(data => {
-                if (data.jwt_tokens) {
-                    document.getElementById('jwtText').textContent = data.jwt_tokens;
+                if (data.tokens && data.tokens.length > 0) {
+                    let decodedText = '';
+                    data.tokens.forEach((token, index) => {
+                        fetch('/decode_jwt', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                token: token
+                            })
+                        })
+                        .then(response => response.json())
+                        .then(decodedData => {
+                            decodedText += `JWT #${index + 1}:\n${decodedData.decoded}\n\n`;
+                            document.getElementById('jwtText').textContent = decodedText;
+                        });
+                    });
+                } else {
+                    document.getElementById('jwtText').textContent = 'No JWT tokens found in request';
                 }
             });
         });
@@ -380,6 +438,280 @@
                 }
             });
         }
+
+        function runJWTAttacks() {
+            const token = document.getElementById('jwtText').textContent;
+            if (!token || token === 'No JWT tokens found in request') {
+                alert('No JWT token found. Please enter a request with a JWT token first.');
+                return;
+            }
+
+            const attacks = [];
+            if (document.getElementById('unverifiedSig').checked) {
+                attacks.push('unverified_sig');
+            }
+            if (document.getElementById('noneSig').checked) {
+                attacks.push('none_sig');
+            }
+            if (document.getElementById('bruteForce').checked) {
+                attacks.push('brute_force');
+            }
+            if (document.getElementById('jwkInjection').checked) {
+                attacks.push('jwk_injection');
+            }
+            if (document.getElementById('kidTraversal').checked) {
+                attacks.push('kid_traversal');
+            }
+            if (document.getElementById('algorithmConfusion').checked) {
+                attacks.push('algorithm_confusion');
+            }
+
+            if (attacks.length === 0) {
+                alert('Please select at least one attack to run.');
+                return;
+            }
+
+            // Run all selected attacks
+            fetch('/run_jwt_attacks', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    token: token,
+                    attacks: attacks
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                let result = 'JWT Attack Results:\n\n';
+                for (const [attack, resultData] of Object.entries(data)) {
+                    result += `${attack.replace(/_/g, ' ').toUpperCase()}:\n`;
+                    if (resultData.error) {
+                        result += `Error: ${resultData.error}\n`;
+                    } else {
+                        result += `Success: ${resultData.success}\n`;
+                        if (resultData.modified_token) {
+                            result += `Modified Token: ${resultData.modified_token}\n`;
+                        }
+                        if (resultData.details) {
+                            result += `Details: ${resultData.details}\n`;
+                        }
+                    }
+                    result += '\n';
+                }
+                alert(result);
+            });
+        }
+
+        // Individual attack checkboxes
+        document.getElementById('unverifiedSig').addEventListener('change', function() {
+            if (this.checked) {
+                runIndividualAttack('unverified_sig');
+            }
+        });
+
+        document.getElementById('noneSig').addEventListener('change', function() {
+            if (this.checked) {
+                runIndividualAttack('none_sig');
+            }
+        });
+
+        document.getElementById('bruteForce').addEventListener('change', function() {
+            if (this.checked) {
+                runIndividualAttack('brute_force');
+            }
+        });
+
+        document.getElementById('jwkInjection').addEventListener('change', function() {
+            if (this.checked) {
+                runIndividualAttack('jwk_injection');
+            }
+        });
+
+        document.getElementById('kidTraversal').addEventListener('change', function() {
+            if (this.checked) {
+                runIndividualAttack('kid_traversal');
+            }
+        });
+
+        document.getElementById('algorithmConfusion').addEventListener('change', function() {
+            if (this.checked) {
+                runIndividualAttack('algorithm_confusion');
+            }
+        });
+
+        function runIndividualAttack(attackType) {
+            const token = document.getElementById('jwtText').textContent;
+            if (!token || token === 'No JWT tokens found in request') {
+                alert('No JWT token found. Please enter a request with a JWT token first.');
+                return;
+            }
+
+            fetch(`/jwt_attack/${attackType}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    token: token
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                let result = `${attackType.replace(/_/g, ' ').toUpperCase()} Attack Result:\n\n`;
+                if (data.error) {
+                    result += `Error: ${data.error}\n`;
+                } else {
+                    result += `Success: ${data.success}\n`;
+                    if (data.modified_token) {
+                        result += `Modified Token: ${data.modified_token}\n`;
+                    }
+                    if (data.details) {
+                        result += `Details: ${data.details}\n`;
+                    }
+                }
+                alert(result);
+            });
+        }
+
+        function editJWT() {
+            const jwtContent = document.getElementById('jwt-content').textContent;
+            if (!jwtContent || jwtContent.includes('No JWT tokens found')) {
+                alert('No JWT to edit');
+                return;
+            }
+
+            try {
+                const sections = jwtContent.split('\n\n');
+                let header = null;
+                let payload = null;
+
+                for (const section of sections) {
+                    if (section.includes('Header:')) {
+                        const headerJson = section.split('Header:')[1].trim();
+                        header = JSON.parse(headerJson);
+                        document.getElementById('jwt-header').value = JSON.stringify(header, null, 2);
+                    } else if (section.includes('Payload:')) {
+                        const payloadJson = section.split('Payload:')[1].trim();
+                        payload = JSON.parse(payloadJson);
+                        document.getElementById('jwt-payload').value = JSON.stringify(payload, null, 2);
+                    }
+                }
+
+                if (!header || !payload) {
+                    throw new Error('Invalid JWT format');
+                }
+
+                document.getElementById('jwt-section').style.display = 'block';
+                updateJWTPreview();
+            } catch (error) {
+                alert('Failed to parse JWT: ' + error.message);
+            }
+        }
+
+        function updateJWTPreview() {
+            try {
+                const header = JSON.parse(document.getElementById('jwt-header').value);
+                const payload = JSON.parse(document.getElementById('jwt-payload').value);
+                const useSecret = document.getElementById('use-secret').checked;
+                const secret = document.getElementById('jwt-secret').value;
+
+                fetch('/api/edit_jwt', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        decoded_text: `Header:\n${JSON.stringify(header)}\n\nPayload:\n${JSON.stringify(payload)}`,
+                        use_secret: useSecret,
+                        secret: secret
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        document.getElementById('jwt-preview-content').textContent = 'Error: ' + data.error;
+                    } else {
+                        document.getElementById('jwt-preview-content').textContent = data.encoded_token;
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('jwt-preview-content').textContent = 'Error: ' + error.message;
+                });
+            } catch (error) {
+                document.getElementById('jwt-preview-content').textContent = 'Error: ' + error.message;
+            }
+        }
+
+        function saveJWT() {
+            const decodedText = document.getElementById('jwtText').textContent;
+            if (!decodedText || decodedText === 'No JWT tokens found in request') {
+                alert('No JWT token found to save.');
+                return;
+            }
+
+            // Get the current request text
+            const requestText = document.getElementById('requestText').value;
+            if (!requestText) {
+                alert('No request found to update.');
+                return;
+            }
+
+            // Find the JWT token in the request
+            fetch('/find_jwt', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    request_text: requestText
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.tokens || data.tokens.length === 0) {
+                    alert('No JWT token found in request to replace.');
+                    return;
+                }
+
+                // Get the original token to replace
+                const originalToken = data.tokens[0];
+                
+                // Edit the JWT using the new endpoint
+                fetch('/edit_jwt', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        decoded_text: decodedText,
+                        use_secret: document.getElementById('useSecret').checked,
+                        secret: document.getElementById('secretEntry').value
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(`Error editing JWT: ${data.error}`);
+                        return;
+                    }
+
+                    // Replace the original token with the new one in the request
+                    const newRequestText = requestText.replace(originalToken, data.encoded_token);
+                    document.getElementById('requestText').value = newRequestText;
+                });
+            });
+        }
+
+        // Add event listeners for real-time preview
+        document.getElementById('jwt-header').addEventListener('input', updateJWTPreview);
+        document.getElementById('jwt-payload').addEventListener('input', updateJWTPreview);
+        document.getElementById('use-secret').addEventListener('change', function() {
+            document.getElementById('jwt-secret').style.display = this.checked ? 'block' : 'none';
+            updateJWTPreview();
+        });
+        document.getElementById('jwt-secret').addEventListener('input', updateJWTPreview);
     </script>
 </body>
 </html> 

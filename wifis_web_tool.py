@@ -357,6 +357,76 @@ class JWTAttacks:
         # Return all found JWTs
         return tokens
 
+    def edit_jwt(self, decoded_text, use_secret=False, secret=''):
+        try:
+            # Split the decoded text into sections
+            sections = decoded_text.split('\n\n')
+            header = None
+            payload = None
+            
+            for section in sections:
+                if 'Header:' in section:
+                    # Extract the JSON part after "Header:"
+                    header_json = section.split('Header:')[1].strip()
+                    try:
+                        header = json.loads(header_json)
+                    except json.JSONDecodeError as e:
+                        return {"error": f"Invalid JSON in Header section: {str(e)}"}
+                
+                elif 'Payload:' in section:
+                    # Extract the JSON part after "Payload:"
+                    payload_json = section.split('Payload:')[1].strip()
+                    try:
+                        payload = json.loads(payload_json)
+                    except json.JSONDecodeError as e:
+                        return {"error": f"Invalid JSON in Payload section: {str(e)}"}
+            
+            if header is None or payload is None:
+                return {"error": "Missing Header or Payload section"}
+
+            # Encode the JWT
+            if use_secret and secret:
+                # Use the algorithm from the header or default to HS256
+                algorithm = header.get('alg', 'HS256')
+                
+                # Check if algorithm uses a secret key
+                if algorithm not in ['HS256', 'HS384', 'HS512']:
+                    return {"error": f"Algorithm {algorithm} does not use a secret key for signing. Only HS256, HS384, and HS512 are supported for secret key signing."}
+                
+                try:
+                    # Create the token using the correct method
+                    encoded_token = jwt.encode(
+                        payload=payload,
+                        key=secret,
+                        algorithm=algorithm,
+                        headers=header
+                    )
+                except Exception as e:
+                    return {"error": f"Failed to encode JWT with secret: {str(e)}"}
+            else:
+                # For unsigned tokens, use the algorithm from the header or 'none'
+                algorithm = header.get('alg', 'none')
+                if algorithm not in ['none', 'HS256', 'HS384', 'HS512']:
+                    algorithm = 'none'
+                
+                try:
+                    # Create the token using the correct method
+                    encoded_token = jwt.encode(
+                        payload=payload,
+                        key='',
+                        algorithm=algorithm,
+                        headers=header
+                    )
+                except Exception as e:
+                    return {"error": f"Failed to encode unsigned JWT: {str(e)}"}
+
+            return {
+                "encoded_token": encoded_token,
+                "success": True
+            }
+        except Exception as e:
+            return {"error": f"Unexpected error in JWT encoding: {str(e)}"}
+
 class Tools:
     def __init__(self, http_request_tool):
         self.http_request_tool = http_request_tool
@@ -637,6 +707,151 @@ def find_jwt():
         "tokens": tokens,
         "count": len(tokens)
     })
+
+@app.route('/is_jwt', methods=['POST'])
+def is_jwt():
+    data = request.get_json()
+    token = data.get('token', '')
+    return jsonify({
+        "is_jwt": http_tool.jwt_attacks.is_jwt(token)
+    })
+
+@app.route('/manage_secrets', methods=['POST'])
+def manage_secrets():
+    data = request.get_json()
+    action = data.get('action', '')  # 'add', 'remove', 'list'
+    secret = data.get('secret', '')
+    return jsonify(http_tool.jwt_attacks.manage_secrets(action, secret))
+
+@app.route('/run_jwt_attacks', methods=['POST'])
+def run_jwt_attacks():
+    data = request.get_json()
+    token = data.get('token', '')
+    attacks = data.get('attacks', [])  # List of attack types to run
+    results = {}
+    
+    for attack in attacks:
+        if attack == 'unverified_sig':
+            results['unverified_sig'] = http_tool.jwt_attacks.unverified_signature_attack(token)
+        elif attack == 'none_sig':
+            results['none_sig'] = http_tool.jwt_attacks.none_signature_attack(token)
+        elif attack == 'brute_force':
+            results['brute_force'] = http_tool.jwt_attacks.brute_force_secret(token)
+        elif attack == 'jwk_injection':
+            results['jwk_injection'] = http_tool.jwt_attacks.jwk_header_injection(token)
+        elif attack == 'kid_traversal':
+            results['kid_traversal'] = http_tool.jwt_attacks.kid_header_traversal(token)
+        elif attack == 'algorithm_confusion':
+            results['algorithm_confusion'] = http_tool.jwt_attacks.algorithm_confusion(token)
+    
+    return jsonify(results)
+
+@app.route('/jwt_attack/unverified_sig', methods=['POST'])
+def jwt_unverified_sig():
+    data = request.get_json()
+    token = data.get('token', '')
+    return jsonify(http_tool.jwt_attacks.unverified_signature_attack(token))
+
+@app.route('/jwt_attack/none_sig', methods=['POST'])
+def jwt_none_sig():
+    data = request.get_json()
+    token = data.get('token', '')
+    return jsonify(http_tool.jwt_attacks.none_signature_attack(token))
+
+@app.route('/jwt_attack/brute_force', methods=['POST'])
+def jwt_brute_force():
+    data = request.get_json()
+    token = data.get('token', '')
+    return jsonify(http_tool.jwt_attacks.brute_force_secret(token))
+
+@app.route('/jwt_attack/jwk_injection', methods=['POST'])
+def jwt_jwk_injection():
+    data = request.get_json()
+    token = data.get('token', '')
+    return jsonify(http_tool.jwt_attacks.jwk_header_injection(token))
+
+@app.route('/jwt_attack/kid_traversal', methods=['POST'])
+def jwt_kid_traversal():
+    data = request.get_json()
+    token = data.get('token', '')
+    return jsonify(http_tool.jwt_attacks.kid_header_traversal(token))
+
+@app.route('/jwt_attack/algorithm_confusion', methods=['POST'])
+def jwt_algorithm_confusion():
+    data = request.get_json()
+    token = data.get('token', '')
+    return jsonify(http_tool.jwt_attacks.algorithm_confusion(token))
+
+@app.route('/encode_jwt', methods=['POST'])
+def encode_jwt():
+    data = request.get_json()
+    decoded_text = data.get('decoded_text', '')
+    use_secret = data.get('use_secret', False)
+    secret = data.get('secret', '')
+
+    try:
+        # Split the decoded text into sections
+        sections = decoded_text.split('\n\n')
+        header = None
+        payload = None
+        
+        for section in sections:
+            if 'Header:' in section:
+                # Extract the JSON part after "Header:"
+                header_json = section.split('Header:')[1].strip()
+                try:
+                    header = json.loads(header_json)
+                except json.JSONDecodeError:
+                    return jsonify({"error": "Invalid JSON in Header section"})
+            
+            elif 'Payload:' in section:
+                # Extract the JSON part after "Payload:"
+                payload_json = section.split('Payload:')[1].strip()
+                try:
+                    payload = json.loads(payload_json)
+                except json.JSONDecodeError:
+                    return jsonify({"error": "Invalid JSON in Payload section"})
+        
+        if header is None or payload is None:
+            return jsonify({"error": "Missing Header or Payload section"})
+
+        # Encode the JWT
+        if use_secret and secret:
+            # Use the algorithm from the header or default to HS256
+            algorithm = header.get('alg', 'HS256')
+            # Create the token using the correct method
+            encoded_token = jwt.encode(
+                payload=payload,
+                key=secret,
+                algorithm=algorithm,
+                headers=header
+            )
+        else:
+            # For unsigned tokens, use 'none' algorithm
+            header['alg'] = 'none'
+            # Create the token using the correct method
+            encoded_token = jwt.encode(
+                payload=payload,
+                key='',
+                algorithm='none',
+                headers=header
+            )
+
+        return jsonify({
+            "encoded_token": encoded_token,
+            "success": True
+        })
+    except Exception as e:
+        return jsonify({"error": f"Failed to encode JWT: {str(e)}"})
+
+@app.route('/edit_jwt', methods=['POST'])
+def edit_jwt():
+    data = request.get_json()
+    return jsonify(http_tool.jwt_attacks.edit_jwt(
+        data.get('decoded_text', ''),
+        data.get('use_secret', False),
+        data.get('secret', '')
+    ))
 
 if __name__ == '__main__':
     app.run(debug=True)
