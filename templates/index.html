@@ -533,112 +533,90 @@
                     const bruteForceModal = new bootstrap.Modal(modal);
                     bruteForceModal.show();
 
-                    // Update progress every second
-                    const progressInterval = setInterval(() => {
-                        const progressBar = modal.querySelector('.progress-bar');
-                        const currentWidth = parseInt(progressBar.style.width);
-                        if (currentWidth < 100) {
-                            progressBar.style.width = (currentWidth + 1) + '%';
-                        }
-                    }, 1000);
-                }
-
-                // Get the original token to replace
-                const originalToken = data.tokens[0];
-
-                // Run the selected attack with the original token
-                fetch(`/jwt_attack/${selectedAttack}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        token: originalToken,
-                        request_text: requestText,
-                        use_proxy: useProxy,
-                        proxy_address: proxyAddress,
-                        verify_cert: verifyCert
-                    })
-                })
-                .then(response => {
-                    if (!response.ok) {
-                        return response.text().then(text => {
-                            throw new Error(`Server error: ${text}`);
+                    // Update output every second
+                    const outputInterval = setInterval(() => {
+                        fetch(`/jwt_attack/${selectedAttack}`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                token: data.tokens[0],
+                                request_text: requestText,
+                                use_proxy: useProxy,
+                                proxy_address: proxyAddress,
+                                verify_cert: verifyCert
+                            })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            const output = document.getElementById('bruteForceOutput');
+                            if (data.error) {
+                                output.textContent = `Error: ${data.error}\nDetails: ${data.details}`;
+                                clearInterval(outputInterval);
+                            } else if (data.output) {
+                                output.textContent = data.output.join('\n');
+                                if (data.success) {
+                                    clearInterval(outputInterval);
+                                    output.textContent += `\n\nSuccess! Found secret: ${data.secret}`;
+                                }
+                            }
+                        })
+                        .catch(error => {
+                            const output = document.getElementById('bruteForceOutput');
+                            output.textContent = `Error: ${error.message}`;
+                            clearInterval(outputInterval);
                         });
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    if (selectedAttack === 'brute_force') {
-                        // Update the modal with the results
-                        const output = document.getElementById('bruteForceOutput');
-                        if (data.error) {
-                            output.textContent = `Error: ${data.error}`;
-                        } else {
-                            output.textContent = `Status: ${data.success ? 'Success' : 'Failed'}\n`;
-                            if (data.details) {
-                                output.textContent += `Details: ${data.details}\n`;
-                            }
-                        }
-                        // Stop the progress animation
-                        clearInterval(progressInterval);
-                        const progressBar = document.querySelector('#bruteForceModal .progress-bar');
-                        progressBar.style.width = '100%';
-                        progressBar.classList.remove('progress-bar-animated');
+                    }, 1000);
+
+                    // Clean up interval when modal is closed
+                    modal.addEventListener('hidden.bs.modal', function () {
+                        clearInterval(outputInterval);
+                    });
+                } else {
+                    // For other attacks, show alert with results and update the request
+                    let message = `${selectedAttack.replace(/_/g, ' ').toUpperCase()}:\n`;
+                    if (data.error) {
+                        message += `Error: ${data.error}`;
+                        alert(message);
                     } else {
-                        // For other attacks, show alert with results and update the request
-                        let message = `${selectedAttack.replace(/_/g, ' ').toUpperCase()}:\n`;
-                        if (data.error) {
-                            message += `Error: ${data.error}`;
-                            alert(message);
-                        } else {
-                            message += `Success: ${data.success}\n`;
-                            if (data.all_results && selectedAttack === 'none_sig') {
-                                message += '\nAttempted variations:\n';
-                                data.all_results.forEach(result => {
-                                    message += `\n${result.variation}:\n`;
-                                    message += `Status Code: ${result.status_code}\n`;
-                                    message += `Success: ${result.success ? 'Yes' : 'No'}\n`;
-                                });
-                            }
-                            if (data.modified_token) {
-                                message += `\nModified Token: ${data.modified_token}\n`;
-                                // Update the request with the modified token
-                                const newRequestText = requestText.replace(originalToken, data.modified_token);
-                                document.getElementById('requestText').value = newRequestText;
-                                // Also update the decoded JWT display
-                                fetch('/decode_jwt', {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                    },
-                                    body: JSON.stringify({
-                                        token: data.modified_token
-                                    })
+                        message += `Success: ${data.success}\n`;
+                        if (data.all_results && selectedAttack === 'none_sig') {
+                            message += '\nAttempted variations:\n';
+                            data.all_results.forEach(result => {
+                                message += `\n${result.variation}:\n`;
+                                message += `Status Code: ${result.status_code}\n`;
+                                message += `Success: ${result.success ? 'Yes' : 'No'}\n`;
+                            });
+                        }
+                        if (data.modified_token) {
+                            message += `\nModified Token: ${data.modified_token}\n`;
+                            // Update the request with the modified token
+                            const newRequestText = requestText.replace(data.tokens[0], data.modified_token);
+                            document.getElementById('requestText').value = newRequestText;
+                            // Also update the decoded JWT display
+                            fetch('/decode_jwt', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({
+                                    token: data.modified_token
                                 })
-                                .then(response => response.json())
-                                .then(decodedData => {
-                                    if (decodedData.decoded) {
-                                        document.getElementById('jwtText').textContent = decodedData.decoded;
-                                    }
-                                });
-                            }
-                            if (data.details) {
-                                message += `\nDetails: ${data.details}`;
-                            }
-                            alert(message);
+                            })
+                            .then(response => response.json())
+                            .then(decodedData => {
+                                if (decodedData.decoded) {
+                                    document.getElementById('jwtText').textContent = decodedData.decoded;
+                                }
+                            });
                         }
+                        if (data.details) {
+                            message += `\nDetails: ${data.details}`;
+                        }
+                        alert(message);
                     }
-                })
-                .catch(error => {
-                    if (selectedAttack === 'brute_force') {
-                        const output = document.getElementById('bruteForceOutput');
-                        output.textContent = `Error: ${error.message}`;
-                        clearInterval(progressInterval);
-                    } else {
-                        alert(`Error running attack: ${error.message}`);
-                    }
-                });
+                }
             });
         }
 
