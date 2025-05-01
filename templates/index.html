@@ -155,32 +155,32 @@
                         <button class="btn btn-primary mt-3" onclick="saveJWT()">Save JWT</button>
                     </div>
                     <div class="col-md-6">
-                        <h4>JWT Editor</h4>
-                        <div id="jwt-section" class="section" style="display: none;">
-                            <div class="jwt-container">
-                                <div class="jwt-editor">
-                                    <div class="editor-section">
-                                        <h5>Header</h5>
-                                        <textarea id="jwt-header" class="json-editor" placeholder="Enter JWT header JSON"></textarea>
-                                    </div>
-                                    <div class="editor-section">
-                                        <h5>Payload</h5>
-                                        <textarea id="jwt-payload" class="json-editor" placeholder="Enter JWT payload JSON"></textarea>
-                                    </div>
-                                    <div class="jwt-options">
-                                        <label>
-                                            <input type="checkbox" id="use-secret"> Use Secret Key
-                                        </label>
-                                        <input type="text" id="jwt-secret" placeholder="Enter secret key" style="display: none;">
-                                    </div>
-                                    <button onclick="saveJWT()">Save JWT</button>
-                                </div>
-                                <div class="jwt-preview">
-                                    <h5>Preview</h5>
-                                    <div id="jwt-preview-content"></div>
-                                </div>
-                            </div>
+                        <h4>JWT Attacks</h4>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="jwtAttack" id="unverifiedSig">
+                            <label class="form-check-label" for="unverifiedSig">Unverified Signature Attack</label>
                         </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="jwtAttack" id="noneSig">
+                            <label class="form-check-label" for="noneSig">None Signature Attack</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="jwtAttack" id="bruteForce">
+                            <label class="form-check-label" for="bruteForce">Brute Force Secret Key</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="jwtAttack" id="jwkInjection">
+                            <label class="form-check-label" for="jwkInjection">JWK Header Injection</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="jwtAttack" id="kidTraversal">
+                            <label class="form-check-label" for="kidTraversal">KID Header Path Traversal</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="jwtAttack" id="algorithmConfusion">
+                            <label class="form-check-label" for="algorithmConfusion">Algorithm Confusion</label>
+                        </div>
+                        <button class="btn btn-primary mt-3" onclick="runJWTAttacks()">Run Selected JWT Attack</button>
                     </div>
                 </div>
             </div>
@@ -440,208 +440,165 @@
         }
 
         function runJWTAttacks() {
-            const token = document.getElementById('jwtText').textContent;
-            if (!token || token === 'No JWT tokens found in request') {
-                alert('No JWT token found. Please enter a request with a JWT token first.');
+            // Get the request text from the HTTP Request tab
+            const requestText = document.getElementById('requestText').value;
+            if (!requestText) {
+                alert('No request found. Please enter a request with a JWT token first.');
                 return;
             }
 
-            const attacks = [];
-            if (document.getElementById('unverifiedSig').checked) {
-                attacks.push('unverified_sig');
-            }
-            if (document.getElementById('noneSig').checked) {
-                attacks.push('none_sig');
-            }
-            if (document.getElementById('bruteForce').checked) {
-                attacks.push('brute_force');
-            }
-            if (document.getElementById('jwkInjection').checked) {
-                attacks.push('jwk_injection');
-            }
-            if (document.getElementById('kidTraversal').checked) {
-                attacks.push('kid_traversal');
-            }
-            if (document.getElementById('algorithmConfusion').checked) {
-                attacks.push('algorithm_confusion');
-            }
-
-            if (attacks.length === 0) {
-                alert('Please select at least one attack to run.');
-                return;
-            }
-
-            // Run all selected attacks
-            fetch('/run_jwt_attacks', {
+            // Find JWT tokens in the request
+            fetch('/find_jwt', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    token: token,
-                    attacks: attacks
+                    request_text: requestText
                 })
             })
             .then(response => response.json())
             .then(data => {
-                let result = 'JWT Attack Results:\n\n';
-                for (const [attack, resultData] of Object.entries(data)) {
-                    result += `${attack.replace(/_/g, ' ').toUpperCase()}:\n`;
-                    if (resultData.error) {
-                        result += `Error: ${resultData.error}\n`;
-                    } else {
-                        result += `Success: ${resultData.success}\n`;
-                        if (resultData.modified_token) {
-                            result += `Modified Token: ${resultData.modified_token}\n`;
+                if (!data.tokens || data.tokens.length === 0) {
+                    alert('No JWT token found in request. Please enter a request with a JWT token first.');
+                    return;
+                }
+
+                // Get the selected attack
+                let selectedAttack = null;
+                const attackTypes = {
+                    'unverifiedSig': 'unverified_sig',
+                    'noneSig': 'none_sig',
+                    'bruteForce': 'brute_force',
+                    'jwkInjection': 'jwk_injection',
+                    'kidTraversal': 'kid_traversal',
+                    'algorithmConfusion': 'algorithm_confusion'
+                };
+
+                for (const [id, attack] of Object.entries(attackTypes)) {
+                    if (document.getElementById(id).checked) {
+                        selectedAttack = attack;
+                        break;
+                    }
+                }
+
+                if (!selectedAttack) {
+                    alert('Please select an attack to run.');
+                    return;
+                }
+
+                // For brute force attack, show progress in a modal
+                if (selectedAttack === 'brute_force') {
+                    const modal = document.createElement('div');
+                    modal.className = 'modal fade';
+                    modal.id = 'bruteForceModal';
+                    modal.setAttribute('tabindex', '-1');
+                    modal.innerHTML = `
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Brute Force Attack Progress</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="progress mb-3">
+                                        <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                                    </div>
+                                    <pre id="bruteForceOutput" class="bg-dark text-light p-3" style="max-height: 300px; overflow-y: auto;"></pre>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    document.body.appendChild(modal);
+                    const bruteForceModal = new bootstrap.Modal(modal);
+                    bruteForceModal.show();
+
+                    // Update progress every second
+                    const progressInterval = setInterval(() => {
+                        const progressBar = modal.querySelector('.progress-bar');
+                        const currentWidth = parseInt(progressBar.style.width);
+                        if (currentWidth < 100) {
+                            progressBar.style.width = (currentWidth + 1) + '%';
                         }
-                        if (resultData.details) {
-                            result += `Details: ${resultData.details}\n`;
-                        }
-                    }
-                    result += '\n';
-                }
-                alert(result);
-            });
-        }
-
-        // Individual attack checkboxes
-        document.getElementById('unverifiedSig').addEventListener('change', function() {
-            if (this.checked) {
-                runIndividualAttack('unverified_sig');
-            }
-        });
-
-        document.getElementById('noneSig').addEventListener('change', function() {
-            if (this.checked) {
-                runIndividualAttack('none_sig');
-            }
-        });
-
-        document.getElementById('bruteForce').addEventListener('change', function() {
-            if (this.checked) {
-                runIndividualAttack('brute_force');
-            }
-        });
-
-        document.getElementById('jwkInjection').addEventListener('change', function() {
-            if (this.checked) {
-                runIndividualAttack('jwk_injection');
-            }
-        });
-
-        document.getElementById('kidTraversal').addEventListener('change', function() {
-            if (this.checked) {
-                runIndividualAttack('kid_traversal');
-            }
-        });
-
-        document.getElementById('algorithmConfusion').addEventListener('change', function() {
-            if (this.checked) {
-                runIndividualAttack('algorithm_confusion');
-            }
-        });
-
-        function runIndividualAttack(attackType) {
-            const token = document.getElementById('jwtText').textContent;
-            if (!token || token === 'No JWT tokens found in request') {
-                alert('No JWT token found. Please enter a request with a JWT token first.');
-                return;
-            }
-
-            fetch(`/jwt_attack/${attackType}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    token: token
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                let result = `${attackType.replace(/_/g, ' ').toUpperCase()} Attack Result:\n\n`;
-                if (data.error) {
-                    result += `Error: ${data.error}\n`;
-                } else {
-                    result += `Success: ${data.success}\n`;
-                    if (data.modified_token) {
-                        result += `Modified Token: ${data.modified_token}\n`;
-                    }
-                    if (data.details) {
-                        result += `Details: ${data.details}\n`;
-                    }
-                }
-                alert(result);
-            });
-        }
-
-        function editJWT() {
-            const jwtContent = document.getElementById('jwt-content').textContent;
-            if (!jwtContent || jwtContent.includes('No JWT tokens found')) {
-                alert('No JWT to edit');
-                return;
-            }
-
-            try {
-                const sections = jwtContent.split('\n\n');
-                let header = null;
-                let payload = null;
-
-                for (const section of sections) {
-                    if (section.includes('Header:')) {
-                        const headerJson = section.split('Header:')[1].trim();
-                        header = JSON.parse(headerJson);
-                        document.getElementById('jwt-header').value = JSON.stringify(header, null, 2);
-                    } else if (section.includes('Payload:')) {
-                        const payloadJson = section.split('Payload:')[1].trim();
-                        payload = JSON.parse(payloadJson);
-                        document.getElementById('jwt-payload').value = JSON.stringify(payload, null, 2);
-                    }
+                    }, 1000);
                 }
 
-                if (!header || !payload) {
-                    throw new Error('Invalid JWT format');
-                }
+                // Get the original token to replace
+                const originalToken = data.tokens[0];
 
-                document.getElementById('jwt-section').style.display = 'block';
-                updateJWTPreview();
-            } catch (error) {
-                alert('Failed to parse JWT: ' + error.message);
-            }
-        }
-
-        function updateJWTPreview() {
-            try {
-                const header = JSON.parse(document.getElementById('jwt-header').value);
-                const payload = JSON.parse(document.getElementById('jwt-payload').value);
-                const useSecret = document.getElementById('use-secret').checked;
-                const secret = document.getElementById('jwt-secret').value;
-
-                fetch('/api/edit_jwt', {
+                // Run the selected attack with the original token
+                fetch(`/jwt_attack/${selectedAttack}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        decoded_text: `Header:\n${JSON.stringify(header)}\n\nPayload:\n${JSON.stringify(payload)}`,
-                        use_secret: useSecret,
-                        secret: secret
+                        token: originalToken
                     })
                 })
                 .then(response => response.json())
                 .then(data => {
-                    if (data.error) {
-                        document.getElementById('jwt-preview-content').textContent = 'Error: ' + data.error;
+                    if (selectedAttack === 'brute_force') {
+                        // Update the modal with the results
+                        const output = document.getElementById('bruteForceOutput');
+                        if (data.error) {
+                            output.textContent = `Error: ${data.error}`;
+                        } else {
+                            output.textContent = `Status: ${data.success ? 'Success' : 'Failed'}\n`;
+                            if (data.details) {
+                                output.textContent += `Details: ${data.details}\n`;
+                            }
+                        }
+                        // Stop the progress animation
+                        clearInterval(progressInterval);
+                        const progressBar = document.querySelector('#bruteForceModal .progress-bar');
+                        progressBar.style.width = '100%';
+                        progressBar.classList.remove('progress-bar-animated');
                     } else {
-                        document.getElementById('jwt-preview-content').textContent = data.encoded_token;
+                        // For other attacks, show alert with results and update the request
+                        let message = `${selectedAttack.replace(/_/g, ' ').toUpperCase()}:\n`;
+                        if (data.error) {
+                            message += `Error: ${data.error}`;
+                            alert(message);
+                        } else {
+                            message += `Success: ${data.success}\n`;
+                            if (data.modified_token) {
+                                message += `Modified Token: ${data.modified_token}\n`;
+                                // Update the request with the modified token
+                                const newRequestText = requestText.replace(originalToken, data.modified_token);
+                                document.getElementById('requestText').value = newRequestText;
+                                // Also update the decoded JWT display
+                                fetch('/decode_jwt', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                    },
+                                    body: JSON.stringify({
+                                        token: data.modified_token
+                                    })
+                                })
+                                .then(response => response.json())
+                                .then(decodedData => {
+                                    document.getElementById('jwtText').textContent = decodedData.decoded;
+                                });
+                            }
+                            if (data.details) {
+                                message += `Details: ${data.details}`;
+                            }
+                            alert(message);
+                        }
                     }
                 })
                 .catch(error => {
-                    document.getElementById('jwt-preview-content').textContent = 'Error: ' + error.message;
+                    if (selectedAttack === 'brute_force') {
+                        const output = document.getElementById('bruteForceOutput');
+                        output.textContent = `Error: ${error.message}`;
+                        clearInterval(progressInterval);
+                    } else {
+                        alert(`Error running attack: ${error.message}`);
+                    }
                 });
-            } catch (error) {
-                document.getElementById('jwt-preview-content').textContent = 'Error: ' + error.message;
-            }
+            });
         }
 
         function saveJWT() {
@@ -700,18 +657,10 @@
                     // Replace the original token with the new one in the request
                     const newRequestText = requestText.replace(originalToken, data.encoded_token);
                     document.getElementById('requestText').value = newRequestText;
+                    alert('JWT successfully saved and updated in request!');
                 });
             });
         }
-
-        // Add event listeners for real-time preview
-        document.getElementById('jwt-header').addEventListener('input', updateJWTPreview);
-        document.getElementById('jwt-payload').addEventListener('input', updateJWTPreview);
-        document.getElementById('use-secret').addEventListener('change', function() {
-            document.getElementById('jwt-secret').style.display = this.checked ? 'block' : 'none';
-            updateJWTPreview();
-        });
-        document.getElementById('jwt-secret').addEventListener('input', updateJWTPreview);
     </script>
 </body>
 </html> 
