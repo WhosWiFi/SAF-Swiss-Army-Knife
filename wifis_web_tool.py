@@ -532,7 +532,7 @@ class JWTAttacks:
         # Create window for managing secrets
         secrets_window = tk.Toplevel(self.root)
         secrets_window.title("Manage JWT Secrets")
-        secrets_window.geometry("600x400")
+        secrets_window.geometry("1200x800")
         
         # Create main frame
         main_frame = ttk.Frame(secrets_window)
