@@ -558,7 +558,17 @@
                                 }
                                 clearInterval(outputInterval);
                             } else if (data.success) {
-                                output.textContent = `Success! Found secret: ${data.secret}\n\nHashcat Output:\n${data.output.join('\n')}`;
+                                // Parse the hashcat output to find the JWT:secret line
+                                const hashcatOutput = data.output.join('\n');
+                                // Look for the line that contains the JWT followed by a colon and the secret
+                                const secretMatch = hashcatOutput.match(/^([^:]+):([^\s]+)$/m);
+                                if (secretMatch) {
+                                    const jwt = secretMatch[1];
+                                    const secret = secretMatch[2];
+                                    output.textContent = `Success! Found secret: ${secret}\n\nHashcat Output:\n${hashcatOutput}`;
+                                } else {
+                                    output.textContent = `Success! Found secret: ${data.secret}\n\nHashcat Output:\n${hashcatOutput}`;
+                                }
                                 clearInterval(outputInterval);
                             } else if (data.output) {
                                 output.textContent = data.output.join('\n');
