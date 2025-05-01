@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTTP Request Tool</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        .monospace {
+            font-family: 'Courier New', Courier, monospace;
+        }
+        .response-area {
+            height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        .jwt-section {
+            display: none;
+        }
+        .tab-content {
+            padding: 20px;
+            border: 1px solid #dee2e6;
+            border-top: none;
+            border-radius: 0 0 0.25rem 0.25rem;
+        }
+        .file-status {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        .file-status i {
+            margin-right: 8px;
+        }
+        .file-status.success i {
+            color: #28a745;
+        }
+        .file-status.error i {
+            color: #dc3545;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#">HTTP Request Tool</a>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <ul class="nav nav-tabs" id="myTab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="request-tab" data-bs-toggle="tab" data-bs-target="#request" type="button" role="tab">HTTP Request</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="jwt-tab" data-bs-toggle="tab" data-bs-target="#jwt" type="button" role="tab">JWT Tools</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tools-tab" data-bs-toggle="tab" data-bs-target="#tools" type="button" role="tab">Tools</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="analysis-tab" data-bs-toggle="tab" data-bs-target="#analysis" type="button" role="tab">Third Party Analysis</button>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="myTabContent">
+            <!-- HTTP Request Tab -->
+            <div class="tab-pane fade show active" id="request" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h4>Request</h4>
+                        <textarea id="requestText" class="form-control monospace" rows="15"></textarea>
+                        <div class="mt-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="useProxy">
+                                <label class="form-check-label" for="useProxy">Use Proxy</label>
+                            </div>
+                            <div class="mt-2">
+                                <input type="text" id="proxyAddress" class="form-control" placeholder="Proxy Address (e.g., http://127.0.0.1:8080)" disabled>
+                            </div>
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox" id="verifyCert" checked>
+                                <label class="form-check-label" for="verifyCert">Verify Proxy Certificate</label>
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <button class="btn btn-primary" onclick="sendRequest()">Send Request</button>
+                            <button class="btn btn-secondary ms-2" onclick="checkCommonFiles()">Check Common Files</button>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h4>Response</h4>
+                        <div id="responseText" class="form-control monospace response-area"></div>
+                        <div id="commonFilesResult" class="form-control monospace response-area mt-3" style="display: none;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- JWT Tools Tab -->
+            <div class="tab-pane fade" id="jwt" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h4>JWT Decoded</h4>
+                        <div id="jwtText" class="form-control monospace response-area"></div>
+                        <div class="mt-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="useSecret">
+                                <label class="form-check-label" for="useSecret">Use Secret Key</label>
+                            </div>
+                            <div class="mt-2">
+                                <input type="text" id="secretEntry" class="form-control" placeholder="Secret Key" disabled>
+                            </div>
+                        </div>
+                        <button class="btn btn-primary mt-3" onclick="editJWT()">Edit JWT</button>
+                    </div>
+                    <div class="col-md-6">
+                        <h4>JWT Attacks</h4>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="unverifiedSig">
+                            <label class="form-check-label" for="unverifiedSig">Unverified Signature Attack</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="noneSig">
+                            <label class="form-check-label" for="noneSig">None Signature Attack</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="bruteForce">
+                            <label class="form-check-label" for="bruteForce">Brute Force Secret Key</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="jwkInjection">
+                            <label class="form-check-label" for="jwkInjection">JWK Header Injection</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="kidTraversal">
+                            <label class="form-check-label" for="kidTraversal">KID Header Path Traversal</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="algorithmConfusion">
+                            <label class="form-check-label" for="algorithmConfusion">Algorithm Confusion</label>
+                        </div>
+                        <button class="btn btn-primary mt-3" onclick="manageSecrets()">Manage Secrets List</button>
+                        <button class="btn btn-primary mt-3" onclick="runJWTAttacks()">Run Selected Attacks</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tools Tab -->
+            <div class="tab-pane fade" id="tools" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-12">
+                        <h4>Clickjack Generator</h4>
+                        <div class="input-group mb-3">
+                            <input type="text" id="clickjackUrl" class="form-control" placeholder="Enter target URL">
+                            <button class="btn btn-primary" onclick="generateClickjack()">Generate</button>
+                        </div>
+                        <div id="clickjackResult" class="form-control monospace response-area"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Third Party Analysis Tab -->
+            <div class="tab-pane fade" id="analysis" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h4>TestSSL</h4>
+                        <div class="input-group mb-3">
+                            <input type="text" id="testsslDomain" class="form-control" placeholder="Enter domain">
+                            <button class="btn btn-primary" onclick="runTestSSL()">Run TestSSL</button>
+                        </div>
+                        <div id="testsslResult" class="form-control monospace response-area"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <h4>Wayback Machine</h4>
+                        <div class="input-group mb-3">
+                            <input type="text" id="waybackUrl" class="form-control" placeholder="Enter URL">
+                            <button class="btn btn-primary" onclick="searchWayback()">Search</button>
+                        </div>
+                        <div id="waybackResult" class="form-control monospace response-area"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Enable/disable proxy address input based on checkbox
+        document.getElementById('useProxy').addEventListener('change', function() {
+            document.getElementById('proxyAddress').disabled = !this.checked;
+        });
+
+        // Enable/disable secret key input based on checkbox
+        document.getElementById('useSecret').addEventListener('change', function() {
+            document.getElementById('secretEntry').disabled = !this.checked;
+        });
+
+        // Auto-detect JWTs in request text
+        document.getElementById('requestText').addEventListener('input', function() {
+            const requestText = this.value;
+            fetch('/process_request', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    request_text: requestText
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.jwt_tokens) {
+                    document.getElementById('jwtText').textContent = data.jwt_tokens;
+                }
+            });
+        });
+
+        function sendRequest() {
+            const requestText = document.getElementById('requestText').value;
+            const useProxy = document.getElementById('useProxy').checked;
+            const proxyAddress = document.getElementById('proxyAddress').value;
+            const verifyCert = document.getElementById('verifyCert').checked;
+
+            fetch('/process_request', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    request_text: requestText,
+                    use_proxy: useProxy,
+                    proxy_address: proxyAddress,
+                    verify_cert: verifyCert
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    document.getElementById('responseText').textContent = data.error;
+                } else {
+                    document.getElementById('responseText').textContent = data.response;
+                }
+            });
+        }
+
+        function generateClickjack() {
+            const url = document.getElementById('clickjackUrl').value;
+            fetch('/generate_clickjack', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    url: url
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('clickjackResult').textContent = data.html;
+            });
+        }
+
+        function checkCommonFiles() {
+            const requestText = document.getElementById('requestText').value;
+            const useProxy = document.getElementById('useProxy').checked;
+            const proxyAddress = document.getElementById('proxyAddress').value;
+            const verifyCert = document.getElementById('verifyCert').checked;
+
+            const commonFilesResult = document.getElementById('commonFilesResult');
+            commonFilesResult.style.display = 'block';
+            commonFilesResult.innerHTML = '<div class="text-center"><i class="bi bi-arrow-repeat spin"></i> Checking files...</div>';
+
+            fetch('/check_common_files', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    request_text: requestText,
+                    use_proxy: useProxy,
+                    proxy_address: proxyAddress,
+                    verify_cert: verifyCert
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    commonFilesResult.innerHTML = `<div class="text-danger">${data.error}</div>`;
+                } else {
+                    let result = `<div>Total files checked: ${data.total_files_checked}</div>`;
+                    result += `<div>Files found: ${data.files_found}</div><br>`;
+                    
+                    if (data.checked_files && data.checked_files.length > 0) {
+                        result += '<div class="mb-3">Checking files:</div>';
+                        data.checked_files.forEach(file => {
+                            const statusClass = file.success ? 'success' : 'error';
+                            const icon = file.success ? 'bi-check-circle-fill' : 'bi-x-circle-fill';
+                            result += `<div class="file-status ${statusClass}">`;
+                            result += `<i class="bi ${icon}"></i>`;
+                            result += `<span>${file.file_path}</span>`;
+                            if (!file.success) {
+                                result += `<span class="text-muted ms-2">(Status: ${file.status_code || 'Error'})</span>`;
+                            }
+                            result += '</div>';
+                        });
+                    }
+                    
+                    if (data.found_files && data.found_files.length > 0) {
+                        result += '<div class="mt-3">Found files:</div>';
+                        data.found_files.forEach(file => {
+                            result += `<div class="file-status success">`;
+                            result += `<i class="bi bi-check-circle-fill"></i>`;
+                            result += `<span>${file.file_path}</span>`;
+                            result += `<span class="text-muted ms-2">(${file.response_length} bytes)</span>`;
+                            result += '</div>';
+                        });
+                    }
+                    
+                    commonFilesResult.innerHTML = result;
+                }
+            });
+        }
+
+        function runTestSSL() {
+            const domain = document.getElementById('testsslDomain').value;
+            fetch('/run_testssl', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    domain: domain
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    document.getElementById('testsslResult').textContent = data.error;
+                } else {
+                    document.getElementById('testsslResult').textContent = data.output.join('\n');
+                }
+            });
+        }
+
+        function searchWayback() {
+            const url = document.getElementById('waybackUrl').value;
+            fetch('/search_wayback', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    url: url
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    document.getElementById('waybackResult').textContent = data.error;
+                } else {
+                    let result = `Found ${data.total_results} unique URLs:\n\n`;
+                    data.results.forEach(item => {
+                        const date = new Date(
+                            item.timestamp.substring(0, 4),
+                            item.timestamp.substring(4, 6) - 1,
+                            item.timestamp.substring(6, 8),
+                            item.timestamp.substring(8, 10),
+                            item.timestamp.substring(10, 12),
+                            item.timestamp.substring(12, 14)
+                        );
+                        result += `URL: ${item.original}\n`;
+                        result += `First Archived: ${date.toLocaleString()}\n`;
+                        result += `Status: ${item.statuscode}\n`;
+                        result += `Type: ${item.mimetype}\n`;
+                        result += `Size: ${(parseInt(item.length) / 1024).toFixed(2)} KB\n`;
+                        result += `Archive Link: https://web.archive.org/web/${item.timestamp}/${item.original}\n`;
+                        result += "-".repeat(80) + "\n\n";
+                    });
+                    document.getElementById('waybackResult').textContent = result;
+                }
+            });
+        }
+    </script>
+</body>
+</html> 
