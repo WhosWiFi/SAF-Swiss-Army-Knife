@@ -21,7 +21,7 @@
         "Content-Length": "The length of the request body in octets",
         "Content-MD5": "A Base64-encoded binary MD5 sum of the content",
         "Content-Type": "The Media type of the body of the request",
-        "Cookie": "An HTTP cookie previously sent by the server",
+        "Cookie": "Contains HTTP cookies previously sent by the server with Set-Cookie. Used to maintain session state and pass user preferences and/or information between requests.",
         "Critical-CH": "Identifies accepted client hints that are critical (Experimental)",
         "Date": "The date and time at which the message was originated",
         "Device-Memory": "Indicates approximate available RAM on client device in gigabytes",
