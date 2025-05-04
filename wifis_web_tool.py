@@ -242,6 +242,98 @@ class HTTPRequestTool:
         except Exception as e:
             return {"error": f"Error processing request: {str(e)}"}
 
+    def analyze_headers(self, request_text):
+        try:
+            # Parse the request to get headers
+            request_lines = request_text.split('\n')
+            if not request_lines:
+                return {"error": "No request found"}
+            
+            # Get headers from request
+            request_headers = {}
+            for line in request_lines[1:]:  # Skip first line (method and path)
+                if ':' in line:
+                    key, value = line.split(':', 1)
+                    request_headers[key.strip()] = value.strip()
+            
+            # Load header information from JSON file
+            try:
+                with open('http_headers.json', 'r', encoding='utf-8') as f:
+                    header_data = json.load(f)
+                    request_headers_db = header_data['request_headers']
+                    response_headers_db = header_data['response_headers']
+            except Exception as e:
+                return {"error": f"Failed to load header database: {str(e)}"}
+            
+            # Process the request to get response headers
+            response = self.process_request(request_text)
+            response_headers = {}
+            
+            if "response" in response and not response.get("error"):
+                # Parse response headers from the response text
+                response_lines = response["response"].split('\n')
+                for line in response_lines[1:]:  # Skip first line (status line)
+                    if ':' in line:
+                        key, value = line.split(':', 1)
+                        response_headers[key.strip()] = value.strip()
+            
+            # Analyze request headers
+            request_analysis = []
+            for header, value in request_headers.items():
+                header_lower = header.lower()
+                description = None
+                
+                # Check request headers
+                for db_header, db_desc in request_headers_db.items():
+                    if header_lower == db_header.lower():
+                        description = db_desc
+                        break
+                
+                # Add to analysis
+                request_analysis.append({
+                    "header": header,
+                    "value": value,
+                    "description": description or "Unknown header",
+                    "is_standard": bool(description),
+                    "type": "request"
+                })
+            
+            # Analyze response headers
+            response_analysis = []
+            for header, value in response_headers.items():
+                header_lower = header.lower()
+                description = None
+                
+                # Check response headers
+                for db_header, db_desc in response_headers_db.items():
+                    if header_lower == db_header.lower():
+                        description = db_desc
+                        break
+                
+                # Add to analysis
+                response_analysis.append({
+                    "header": header,
+                    "value": value,
+                    "description": description or "Unknown header",
+                    "is_standard": bool(description),
+                    "type": "response"
+                })
+            
+            # Combine analyses
+            all_headers = request_analysis + response_analysis
+            
+            return {
+                "total_headers": len(all_headers),
+                "request_headers": len(request_analysis),
+                "response_headers": len(response_analysis),
+                "standard_headers": sum(1 for h in all_headers if h["is_standard"]),
+                "custom_headers": sum(1 for h in all_headers if not h["is_standard"]),
+                "headers": all_headers
+            }
+            
+        except Exception as e:
+            return {"error": f"Failed to analyze headers: {str(e)}"}
+
 class JWTAttacks:
     def __init__(self, http_request_tool):
         self.http_request_tool = http_request_tool
@@ -1201,6 +1293,11 @@ def jwt_attack(attack_type):
         return jsonify({"error": f"Unknown attack type: {attack_type}"})
 
     return jsonify(result)
+
+@app.route('/analyze_headers', methods=['POST'])
+def analyze_headers():
+    data = request.get_json()
+    return jsonify(http_tool.analyze_headers(data.get('request_text', '')))
 
 if __name__ == '__main__':
     app.run(debug=True)
