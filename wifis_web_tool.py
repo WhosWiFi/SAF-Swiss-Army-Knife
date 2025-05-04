@@ -983,15 +983,16 @@ class Third_Party_Analysis:
             
             # Configure session with retries and longer timeout
             session = requests.Session()
-            retry = requests.adapters.HTTPAdapter(max_retries=3)
+            retry = requests.adapters.HTTPAdapter(max_retries=5)  # Increased retries
             session.mount('https://', retry)
             session.mount('http://', retry)
             
             # Initialize variables for pagination
             page = 0
-            page_size = 50  # Default page size
+            page_size = 100  # Increased page size
             all_results = []
-            max_results = 150000  # Maximum results limit
+            max_results = 150000
+            seen_urls = set()  # Track unique URLs
             
             # First get total number of pages
             num_pages_url = f"https://web.archive.org/cdx/search/cdx?url={domain}&matchType=domain&output=json&showNumPages=true"
@@ -1000,48 +1001,32 @@ class Third_Party_Analysis:
                 if num_pages_response.status_code == 200:
                     total_pages = int(num_pages_response.text.strip())
                 else:
-                    total_pages = 1  # Fallback if we can't get total pages
+                    total_pages = 1
             except:
-                total_pages = 1  # Fallback if we can't get total pages
-            
-            # Initialize progress tracking
-            progress = {
-                "current_page": 0,
-                "total_pages": total_pages,
-                "results_found": 0,
-                "status": "searching"
-            }
+                total_pages = 1
             
             yield {"output": f"Starting Wayback Machine search for {domain}\nTotal pages to search: {total_pages}\n", "done": False}
             
             while page < total_pages and len(all_results) < max_results:
-                # Update progress
-                progress["current_page"] = page
-                progress["results_found"] = len(all_results)
-                
                 yield {"output": f"Searching page {page + 1} of {total_pages}...\n", "done": False}
                 
-                # Construct the Wayback Machine CDX API URL with proper format and pagination
+                # Construct the Wayback Machine CDX API URL
                 wayback_url = f"https://web.archive.org/cdx/search/cdx?url={domain}&matchType=domain&output=json&fl=timestamp,original,mimetype,statuscode,digest,length&collapse=urlkey&page={page}&pageSize={page_size}"
                 
                 try:
-                    # Send request to Wayback Machine API with longer timeout
                     response = session.get(wayback_url, timeout=60)
                     
-                    if response.status_code == 429:  # Too Many Requests
-                        progress["status"] = "rate_limited"
-                        yield {"output": "Rate limited. Waiting 5 seconds before retrying...\n", "done": False}
-                        time.sleep(5)  # Wait 5 seconds before retrying
+                    if response.status_code == 429:
+                        yield {"output": "Rate limited. Waiting 10 seconds before retrying...\n", "done": False}
+                        time.sleep(10)  # Increased wait time
                         continue
                     
                     if response.status_code != 200:
-                        progress["status"] = "error"
-                        yield {"error": f"Failed to fetch data from Wayback Machine (Status code: {response.status_code})", "done": True}
+                        yield {"error": f"Failed to fetch data (Status code: {response.status_code})", "done": True}
                         return
                     
-                    # Parse the JSON response
                     data = response.json()
-                    if not data or len(data) <= 1:  # First row is headers
+                    if not data or len(data) <= 1:
                         break
                     
                     # Process results
@@ -1050,6 +1035,11 @@ class Third_Party_Analysis:
                             timestamp, original, mimetype, statuscode, digest, length = row
                             if not all([timestamp, original, mimetype, statuscode, digest, length]):
                                 continue
+                            
+                            # Skip if we've already seen this URL
+                            if original in seen_urls:
+                                continue
+                            seen_urls.add(original)
                             
                             # Add result to collection
                             all_results.append({
@@ -1062,7 +1052,6 @@ class Third_Party_Analysis:
                             
                             # Format and yield the result
                             try:
-                                # Parse the timestamp into a datetime object
                                 date = datetime(
                                     int(timestamp[0:4]),
                                     int(timestamp[4:6]),
@@ -1072,9 +1061,7 @@ class Third_Party_Analysis:
                                     int(timestamp[12:14])
                                 )
                                 
-                                # Format the result text
-                                result_text = f"\n"
-                                result_text = f"Found URL: {original}\n"
+                                result_text = f"\nFound URL: {original}\n"
                                 result_text += f"First Archived: {date.strftime('%Y-%m-%d %H:%M:%S')}\n"
                                 result_text += f"Status: {statuscode}\n"
                                 result_text += f"Type: {mimetype}\n"
@@ -1083,9 +1070,7 @@ class Third_Party_Analysis:
                                 result_text += "-" * 80 + "\n"
                                 yield {"output": result_text, "done": False}
                             except Exception as e:
-                                # If date parsing fails, just show the basic info
-                                result_text = f"\n"
-                                result_text = f"Found URL: {original}\n"
+                                result_text = f"\nFound URL: {original}\n"
                                 result_text += f"Timestamp: {timestamp}\n"
                                 result_text += f"Status: {statuscode}\n"
                                 result_text += f"Type: {mimetype}\n"
@@ -1094,7 +1079,6 @@ class Third_Party_Analysis:
                                 result_text += "-" * 80 + "\n"
                                 yield {"output": result_text, "done": False}
                             
-                            # Check if we've reached the maximum results
                             if len(all_results) >= max_results:
                                 break
                             
@@ -1102,23 +1086,17 @@ class Third_Party_Analysis:
                             yield {"output": f"Error processing result: {str(e)}\n", "done": False}
                             continue
                     
-                    # Move to next page
                     page += 1
-                    
-                    # Add a small delay between requests to avoid rate limiting
-                    time.sleep(1)
+                    time.sleep(2)  # Increased delay between requests
                     
                 except requests.Timeout:
-                    progress["status"] = "timeout"
-                    yield {"output": "Request timed out. Retrying...\n", "done": False}
-                    time.sleep(5)  # Wait 5 seconds before retrying
+                    yield {"output": "Request timed out. Waiting 10 seconds before retrying...\n", "done": False}
+                    time.sleep(10)
                     continue
                 except requests.RequestException as e:
-                    progress["status"] = "error"
                     yield {"error": f"Failed to connect to Wayback Machine: {str(e)}", "done": True}
                     return
             
-            progress["status"] = "completed"
             yield {"output": f"\nSearch completed. Found {len(all_results)} unique URLs.\n", "done": True}
             
         except Exception as e:
