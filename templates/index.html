@@ -745,8 +745,10 @@
 
         function analyzeHeaders() {
             const requestText = document.getElementById('requestText').value;
-            if (!requestText) {
-                alert('Please enter a request first.');
+            const responseText = document.getElementById('responseText').textContent;
+            
+            if (!requestText && !responseText) {
+                alert('Please enter a request or response first.');
                 return;
             }
 
@@ -754,13 +756,16 @@
             headerAnalysisResult.style.display = 'block';
             headerAnalysisResult.innerHTML = '<div class="text-center"><i class="bi bi-arrow-repeat spin"></i> Analyzing headers...</div>';
 
+            // Combine request and response text if both exist
+            const combinedText = requestText + (responseText ? '\n\n' + responseText : '');
+
             fetch('/analyze_headers', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    request_text: requestText
+                    request_text: combinedText
                 })
             })
             .then(response => response.json())

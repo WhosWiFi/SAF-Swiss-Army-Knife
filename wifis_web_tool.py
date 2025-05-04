@@ -252,6 +252,8 @@ class HTTPRequestTool:
             # Get headers from request
             request_headers = {}
             for line in request_lines[1:]:  # Skip first line (method and path)
+                if not line.strip():  # Empty line indicates end of headers
+                    break
                 if ':' in line:
                     key, value = line.split(':', 1)
                     request_headers[key.strip()] = value.strip()
@@ -264,20 +266,6 @@ class HTTPRequestTool:
                     response_headers_db = header_data['response_headers']
             except Exception as e:
                 return {"error": f"Failed to load header database: {str(e)}"}
-            
-            # Process the request to get response headers
-            response = self.process_request(request_text)
-            response_headers = {}
-            
-            if "response" in response and not response.get("error"):
-                # Parse response headers from the response text
-                response_lines = response["response"].split('\n')
-                for line in response_lines[1:]:  # Skip first line (status line)
-                    if not line.strip():  # Empty line indicates end of headers
-                        break
-                    if ':' in line:
-                        key, value = line.split(':', 1)
-                        response_headers[key.strip()] = value.strip()
             
             # Analyze request headers
             request_analysis = []
@@ -299,6 +287,23 @@ class HTTPRequestTool:
                     "is_standard": bool(description),
                     "type": "request"
                 })
+            
+            # Check if there's a response section in the request text
+            response_headers = {}
+            in_response = False
+            for line in request_lines:
+                # Look for HTTP response status line (e.g., "HTTP/1.1 200 OK")
+                if line.strip().startswith('HTTP/'):
+                    in_response = True
+                    continue
+                
+                # If we're in the response section and find a header
+                if in_response and ':' in line:
+                    key, value = line.split(':', 1)
+                    response_headers[key.strip()] = value.strip()
+                # Stop at empty line after response headers
+                elif in_response and not line.strip():
+                    break
             
             # Analyze response headers
             response_analysis = []
