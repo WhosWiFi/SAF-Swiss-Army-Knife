@@ -454,10 +454,20 @@ class JWTAttacks:
 
             # Check for Cookie header
             if 'Cookie:' in line:
+                # Extract all cookie values
                 cookie_pairs = line.split(':', 1)[1].strip().split(';')
                 for pair in cookie_pairs:
-                    cookie_name, cookie_value = pair.strip().split('=', 1) if '=' in pair else (None, pair.strip())
-                    if cookie_value:
+                    if '=' in pair:
+                        cookie_name, cookie_value = pair.strip().split('=', 1)
+                        if cookie_value:
+                            matches = re.findall(jwt_pattern, cookie_value)
+                            for token in matches:
+                                if token not in seen_tokens and self.is_jwt(token):
+                                    tokens.append(token)
+                                    seen_tokens.add(token)
+                    else:
+                        # Handle case where cookie value might be a JWT
+                        cookie_value = pair.strip()
                         matches = re.findall(jwt_pattern, cookie_value)
                         for token in matches:
                             if token not in seen_tokens and self.is_jwt(token):
