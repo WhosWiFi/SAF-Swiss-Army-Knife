@@ -79,6 +79,23 @@
             white-space: pre-wrap;
             font-family: monospace;
         }
+        .security-finding {
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+        }
+        .security-finding.warning {
+            background-color: #fff3cd;
+            border: 1px solid #ffeeba;
+        }
+        .security-finding.danger {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+        }
+        .security-finding.info {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+        }
     </style>
 </head>
 <body>
@@ -108,7 +125,7 @@
             <!-- HTTP Request Tab -->
             <div class="tab-pane fade show active" id="request" role="tabpanel">
                 <div class="row">
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                         <h4>Request</h4>
                         <textarea id="requestText" class="form-control monospace" rows="15"></textarea>
                         <div class="mt-3">
@@ -130,11 +147,22 @@
                             <button class="btn btn-info ms-2" onclick="analyzeHeaders()">Header Analysis</button>
                         </div>
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                         <h4>Response</h4>
                         <div id="responseText" class="form-control monospace response-area"></div>
                         <div id="commonFilesResult" class="form-control monospace response-area mt-3" style="display: none;"></div>
-                        <div id="headerAnalysisResult" class="form-control monospace response-area mt-3" style="display: none;"></div>
+                    </div>
+                    <div class="col-md-4">
+                        <h4>Header Analysis</h4>
+                        <div id="headerAnalysisResult" class="form-control monospace response-area"></div>
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-md-12">
+                        <h4>Security Findings</h4>
+                        <div id="securityFindings" class="form-control monospace response-area">
+                            <div class="text-muted">Click "Header Analysis" to see security findings...</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -753,8 +781,10 @@
             }
 
             const headerAnalysisResult = document.getElementById('headerAnalysisResult');
+            const securityFindings = document.getElementById('securityFindings');
             headerAnalysisResult.style.display = 'block';
             headerAnalysisResult.innerHTML = '<div class="text-center"><i class="bi bi-arrow-repeat spin"></i> Analyzing headers...</div>';
+            securityFindings.innerHTML = '<div class="text-center"><i class="bi bi-arrow-repeat spin"></i> Analyzing security findings...</div>';
 
             // Combine request and response text if both exist
             const combinedText = requestText + (responseText ? '\n\n' + responseText : '');
@@ -772,6 +802,7 @@
             .then(data => {
                 if (data.error) {
                     headerAnalysisResult.innerHTML = `<div class="text-danger">${data.error}</div>`;
+                    securityFindings.innerHTML = `<div class="text-danger">${data.error}</div>`;
                     return;
                 }
 
@@ -825,9 +856,132 @@
                 }
 
                 headerAnalysisResult.innerHTML = result;
+
+                // Analyze security findings
+                let securityFindingsHtml = '<div class="mb-3">Security Findings:</div>';
+                
+                // Check for missing security headers
+                const requiredHeaders = [
+                    'Strict-Transport-Security',
+                    'Content-Security-Policy',
+                    'X-Content-Type-Options',
+                    'X-Frame-Options'
+                ];
+                
+                const missingHeaders = requiredHeaders.filter(header => 
+                    !responseHeaders.some(h => h.header.toLowerCase() === header.toLowerCase())
+                );
+                
+                if (missingHeaders.length > 0) {
+                    securityFindingsHtml += `<div class="security-finding danger">
+                        <h5><i class="bi bi-exclamation-triangle-fill"></i> Missing Security Headers</h5>
+                        <p>The following security headers are missing:</p>
+                        <ul>${missingHeaders.map(h => `<li>${h}</li>`).join('')}</ul>
+                    </div>`;
+                }
+
+                // Check for deprecated X-XSS-Protection header
+                const xssProtectionHeader = responseHeaders.find(h => h.header.toLowerCase() === 'x-xss-protection');
+                if (xssProtectionHeader) {
+                    securityFindingsHtml += `<div class="security-finding warning">
+                        <h5><i class="bi bi-exclamation-circle-fill"></i> Deprecated X-XSS-Protection Header</h5>
+                        <p>The X-XSS-Protection header is deprecated and should be removed. Modern browsers use Content-Security-Policy instead.</p>
+                        <p>Current value: ${xssProtectionHeader.value}</p>
+                    </div>`;
+                }
+
+                // Check for custom headers
+                const customHeaders = responseHeaders.filter(h => !h.is_standard);
+                if (customHeaders.length > 0) {
+                    securityFindingsHtml += `<div class="security-finding warning">
+                        <h5><i class="bi bi-exclamation-circle-fill"></i> Custom Headers Found</h5>
+                        <p>The following custom headers should be reviewed:</p>
+                        <ul>${customHeaders.map(h => `<li>${h.header}: ${h.value}</li>`).join('')}</ul>
+                    </div>`;
+                }
+
+                // Check for Server header
+                const serverHeader = responseHeaders.find(h => h.header.toLowerCase() === 'server');
+                if (serverHeader) {
+                    securityFindingsHtml += `<div class="security-finding danger">
+                        <h5><i class="bi bi-exclamation-triangle-fill"></i> Server Information Disclosure</h5>
+                        <p>The Server header reveals server information: ${serverHeader.value}</p>
+                    </div>`;
+                }
+
+                // Check for Via header
+                const viaHeader = responseHeaders.find(h => h.header.toLowerCase() === 'via');
+                if (viaHeader) {
+                    securityFindingsHtml += `<div class="security-finding warning">
+                        <h5><i class="bi bi-exclamation-circle-fill"></i> Internal IP Disclosure</h5>
+                        <p>The Via header may reveal internal IP addresses: ${viaHeader.value}</p>
+                    </div>`;
+                }
+
+                // Check for Set-Cookie security flags
+                const setCookieHeaders = responseHeaders.filter(h => h.header.toLowerCase() === 'set-cookie');
+                setCookieHeaders.forEach(header => {
+                    const value = header.value.toLowerCase();
+                    const issues = [];
+                    
+                    if (value.includes('domain=*')) {
+                        issues.push('Wildcard domain (*) is not recommended');
+                    }
+                    if (!value.includes('httponly')) {
+                        issues.push('Missing HttpOnly flag');
+                    }
+                    if (!value.includes('secure')) {
+                        issues.push('Missing Secure flag');
+                    }
+                    
+                    if (issues.length > 0) {
+                        securityFindingsHtml += `<div class="security-finding danger">
+                            <h5><i class="bi bi-exclamation-triangle-fill"></i> Cookie Security Issues</h5>
+                            <p>Cookie security issues found:</p>
+                            <ul>${issues.map(issue => `<li>${issue}</li>`).join('')}</ul>
+                        </div>`;
+                    }
+                });
+
+                // Check for Content-Security-Policy
+                const cspHeader = responseHeaders.find(h => 
+                    h.header.toLowerCase() === 'content-security-policy' || 
+                    h.header.toLowerCase() === 'x-content-security-policy'
+                );
+                if (cspHeader) {
+                    const value = cspHeader.value.toLowerCase();
+                    const issues = [];
+                    
+                    if (value.includes('unsafe-inline')) {
+                        issues.push('unsafe-inline is not recommended');
+                    }
+                    if (value.includes('unsafe-eval')) {
+                        issues.push('unsafe-eval is not recommended');
+                    }
+                    
+                    // Log script-src for review
+                    const scriptSrcMatch = value.match(/script-src\s+([^;]+)/i);
+                    if (scriptSrcMatch) {
+                        securityFindingsHtml += `<div class="security-finding info">
+                            <h5><i class="bi bi-info-circle-fill"></i> Content-Security-Policy Script Sources</h5>
+                            <p>Script sources should be reviewed: ${scriptSrcMatch[1]}</p>
+                        </div>`;
+                    }
+                    
+                    if (issues.length > 0) {
+                        securityFindingsHtml += `<div class="security-finding danger">
+                            <h5><i class="bi bi-exclamation-triangle-fill"></i> Content-Security-Policy Issues</h5>
+                            <p>The following CSP issues were found:</p>
+                            <ul>${issues.map(issue => `<li>${issue}</li>`).join('')}</ul>
+                        </div>`;
+                    }
+                }
+
+                securityFindings.innerHTML = securityFindingsHtml;
             })
             .catch(error => {
                 headerAnalysisResult.innerHTML = `<div class="text-danger">Error: ${error.message}</div>`;
+                securityFindings.innerHTML = `<div class="text-danger">Error: ${error.message}</div>`;
             });
         }
     </script>
