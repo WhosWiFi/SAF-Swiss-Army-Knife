@@ -413,21 +413,6 @@
 
                                 let result = `<div class="mb-3">Common File Check Results:</div>`;
                                 
-                                // Add progress bar
-                                const progress = (data.total_files_checked / data.total_files) * 100;
-                                result += `
-                                    <div class="progress mb-3" style="height: 25px;">
-                                        <div class="progress-bar progress-bar-striped progress-bar-animated" 
-                                             role="progressbar" 
-                                             style="width: ${progress}%"
-                                             aria-valuenow="${progress}" 
-                                             aria-valuemin="0" 
-                                             aria-valuemax="100">
-                                            ${Math.round(progress)}% Complete
-                                        </div>
-                                    </div>
-                                `;
-                                
                                 result += `<div>Total files checked: ${data.total_files_checked} of ${data.total_files}</div>`;
                                 result += `<div>Files found: ${data.files_found}</div><br>`;
                                 
