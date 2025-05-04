@@ -777,9 +777,21 @@
                 result += `<div>Standard Headers: ${data.standard_headers}</div>`;
                 result += `<div>Custom Headers: ${data.custom_headers}</div>`;
 
-                // Group headers by type
-                const requestHeaders = data.headers.filter(h => h.type === 'request');
-                const responseHeaders = data.headers.filter(h => h.type === 'response');
+                // Group headers by type and filter out empty/invalid headers
+                const requestHeaders = data.headers.filter(h => 
+                    h.type === 'request' && 
+                    h.header && 
+                    h.header.trim() !== '' && 
+                    h.value !== undefined && 
+                    h.value !== null
+                );
+                const responseHeaders = data.headers.filter(h => 
+                    h.type === 'response' && 
+                    h.header && 
+                    h.header.trim() !== '' && 
+                    h.value !== undefined && 
+                    h.value !== null
+                );
 
                 // Display Request Headers
                 if (requestHeaders.length > 0) {
@@ -787,9 +799,9 @@
                     requestHeaders.forEach(header => {
                         const headerClass = header.is_standard ? 'success' : 'warning';
                         result += `<div class="header-item ${headerClass} p-2 mb-2 rounded">`;
-                        result += `<div class="fw-bold">${header.header}</div>`;
-                        result += `<div class="text-muted">Value: ${header.value}</div>`;
-                        result += `<div>Description: ${header.description}</div>`;
+                        result += `<div>Header Name: ${header.header}</div>`;
+                        result += `<div>Value: ${header.value}</div>`;
+                        result += `<div>Description: ${header.is_standard ? header.description : 'Custom Header'}</div>`;
                         result += `</div>`;
                     });
                 }
@@ -800,9 +812,9 @@
                     responseHeaders.forEach(header => {
                         const headerClass = header.is_standard ? 'success' : 'warning';
                         result += `<div class="header-item ${headerClass} p-2 mb-2 rounded">`;
-                        result += `<div class="fw-bold">${header.header}</div>`;
-                        result += `<div class="text-muted">Value: ${header.value}</div>`;
-                        result += `<div>Description: ${header.description}</div>`;
+                        result += `<div>Header Name: ${header.header}</div>`;
+                        result += `<div>Value: ${header.value}</div>`;
+                        result += `<div>Description: ${header.is_standard ? header.description : 'Custom Header'}</div>`;
                         result += `</div>`;
                     });
                 }

@@ -273,6 +273,8 @@ class HTTPRequestTool:
                 # Parse response headers from the response text
                 response_lines = response["response"].split('\n')
                 for line in response_lines[1:]:  # Skip first line (status line)
+                    if not line.strip():  # Empty line indicates end of headers
+                        break
                     if ':' in line:
                         key, value = line.split(':', 1)
                         response_headers[key.strip()] = value.strip()
@@ -293,7 +295,7 @@ class HTTPRequestTool:
                 request_analysis.append({
                     "header": header,
                     "value": value,
-                    "description": description or "Unknown header",
+                    "description": description or "Custom Header",
                     "is_standard": bool(description),
                     "type": "request"
                 })
@@ -314,7 +316,7 @@ class HTTPRequestTool:
                 response_analysis.append({
                     "header": header,
                     "value": value,
-                    "description": description or "Unknown header",
+                    "description": description or "Custom Header",
                     "is_standard": bool(description),
                     "type": "response"
                 })
