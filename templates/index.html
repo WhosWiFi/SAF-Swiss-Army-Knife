@@ -392,44 +392,96 @@
                     verify_cert: verifyCert
                 })
             })
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    securityFindings.innerHTML = `<div class="text-danger">${data.error}</div>`;
-                    return;
+            .then(response => {
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                function processChunk(chunk) {
+                    buffer += chunk;
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop(); // Keep the last incomplete line in the buffer
+
+                    for (const line of lines) {
+                        if (line.trim()) {
+                            try {
+                                const data = JSON.parse(line);
+                                if (data.error) {
+                                    securityFindings.innerHTML = `<div class="text-danger">${data.error}</div>`;
+                                    return;
+                                }
+
+                                let result = `<div class="mb-3">Common File Check Results:</div>`;
+                                
+                                // Add progress bar
+                                const progress = (data.total_files_checked / data.total_files) * 100;
+                                result += `
+                                    <div class="progress mb-3" style="height: 25px;">
+                                        <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                             role="progressbar" 
+                                             style="width: ${progress}%"
+                                             aria-valuenow="${progress}" 
+                                             aria-valuemin="0" 
+                                             aria-valuemax="100">
+                                            ${Math.round(progress)}% Complete
+                                        </div>
+                                    </div>
+                                `;
+                                
+                                result += `<div>Total files checked: ${data.total_files_checked} of ${data.total_files}</div>`;
+                                result += `<div>Files found: ${data.files_found}</div><br>`;
+                                
+                                if (data.checked_files && data.checked_files.length > 0) {
+                                    result += '<div class="mb-3">Checking files:</div>';
+                                    data.checked_files.forEach(file => {
+                                        const statusClass = file.success ? 'success' : 'error';
+                                        const icon = file.success ? 'bi-check-circle-fill' : 'bi-x-circle-fill';
+                                        result += `<div class="file-status ${statusClass}">`;
+                                        result += `<i class="bi ${icon}"></i>`;
+                                        result += `<span>${file.file_path}</span>`;
+                                        if (!file.success) {
+                                            result += `<span class="text-muted ms-2">(Status: ${file.status_code || 'Error'})</span>`;
+                                        }
+                                        result += '</div>';
+                                    });
+                                }
+                                
+                                if (data.found_files && data.found_files.length > 0) {
+                                    result += '<div class="mt-3">Found files:</div>';
+                                    data.found_files.forEach(file => {
+                                        result += `<div class="file-status success">`;
+                                        result += `<i class="bi bi-check-circle-fill"></i>`;
+                                        result += `<span>${file.file_path}</span>`;
+                                        result += `<span class="text-muted ms-2">(${file.response_length} bytes)</span>`;
+                                        result += '</div>';
+                                    });
+                                }
+                                
+                                securityFindings.innerHTML = result;
+                                securityFindings.scrollTop = securityFindings.scrollHeight;
+                            } catch (e) {
+                                console.error('Error parsing JSON:', e);
+                            }
+                        }
+                    }
                 }
 
-                let result = `<div class="mb-3">Common File Check Results:</div>`;
-                result += `<div>Total files checked: ${data.total_files_checked}</div>`;
-                result += `<div>Files found: ${data.files_found}</div><br>`;
-                
-                if (data.checked_files && data.checked_files.length > 0) {
-                    result += '<div class="mb-3">Checking files:</div>';
-                    data.checked_files.forEach(file => {
-                        const statusClass = file.success ? 'success' : 'error';
-                        const icon = file.success ? 'bi-check-circle-fill' : 'bi-x-circle-fill';
-                        result += `<div class="file-status ${statusClass}">`;
-                        result += `<i class="bi ${icon}"></i>`;
-                        result += `<span>${file.file_path}</span>`;
-                        if (!file.success) {
-                            result += `<span class="text-muted ms-2">(Status: ${file.status_code || 'Error'})</span>`;
+                function readStream() {
+                    reader.read().then(({done, value}) => {
+                        if (done) {
+                            if (buffer.trim()) {
+                                processChunk(buffer);
+                            }
+                            return;
                         }
-                        result += '</div>';
+
+                        const chunk = decoder.decode(value, {stream: true});
+                        processChunk(chunk);
+                        readStream();
                     });
                 }
-                
-                if (data.found_files && data.found_files.length > 0) {
-                    result += '<div class="mt-3">Found files:</div>';
-                    data.found_files.forEach(file => {
-                        result += `<div class="file-status success">`;
-                        result += `<i class="bi bi-check-circle-fill"></i>`;
-                        result += `<span>${file.file_path}</span>`;
-                        result += `<span class="text-muted ms-2">(${file.response_length} bytes)</span>`;
-                        result += '</div>';
-                    });
-                }
-                
-                securityFindings.innerHTML = result;
+
+                readStream();
             })
             .catch(error => {
                 securityFindings.innerHTML = `<div class="text-danger">Error: ${error.message}</div>`;

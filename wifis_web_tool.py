@@ -92,9 +92,15 @@ class HTTPRequestTool:
                 }
                 verify = verify_cert
             
+            # Load common files to check
+            with open('common_files.txt', 'r') as f:
+                common_files = [line.strip() for line in f if line.strip()]
+            
+            total_files = len(common_files)
             found_files = []
             checked_files = []
-            for file_path in self.common_files:
+            
+            for file_path in common_files:
                 # Try the file path
                 url = f"{base_url}{file_path}"
                 try:
@@ -130,7 +136,8 @@ class HTTPRequestTool:
                     })
             
             return {
-                "total_files_checked": len(self.common_files),
+                "total_files": total_files,
+                "total_files_checked": len(checked_files),
                 "files_found": len(found_files),
                 "found_files": found_files,
                 "checked_files": checked_files
@@ -1235,13 +1242,133 @@ def generate_clickjack():
 
 @app.route('/check_common_files', methods=['POST'])
 def check_common_files():
-    data = request.get_json()
-    return jsonify(http_tool.check_common_files(
-        data.get('request_text', ''),
-        data.get('use_proxy', False),
-        data.get('proxy_address'),
-        data.get('verify_cert', True)
-    ))
+    try:
+        data = request.get_json()
+        request_text = data.get('request_text', '')
+        use_proxy = data.get('use_proxy', False)
+        proxy_address = data.get('proxy_address', '')
+        verify_cert = data.get('verify_cert', False)
+
+        if not request_text:
+            return jsonify({'error': 'No request text provided'}), 400
+
+        # Parse the request to get the base URL
+        lines = request_text.split('\n')
+        if not lines:
+            return jsonify({'error': 'Invalid request format'}), 400
+
+        first_line = lines[0].strip()
+        if not first_line:
+            return jsonify({'error': 'Invalid request format'}), 400
+
+        # Extract the URL from the first line
+        parts = first_line.split()
+        if len(parts) < 2:
+            return jsonify({'error': 'Invalid request format'}), 400
+
+        method, path = parts[0], parts[1]
+        if not path.startswith('http'):
+            # If it's a relative path, we need the Host header
+            host = None
+            for line in lines[1:]:
+                if line.lower().startswith('host:'):
+                    host = line.split(':', 1)[1].strip()
+                    break
+            if not host:
+                return jsonify({'error': 'No Host header found'}), 400
+            base_url = f"https://{host}"
+        else:
+            base_url = path.split('?')[0]  # Remove query parameters
+
+        # Load common files to check
+        with open('common_files.txt', 'r') as f:
+            common_files = [line.strip() for line in f if line.strip()]
+
+        total_files = len(common_files)
+        found_files = []
+        checked_files = []
+
+        def generate():
+            # Send initial progress
+            yield json.dumps({
+                'total_files': total_files,
+                'total_files_checked': 0,
+                'files_found': 0,
+                'checked_files': [],
+                'found_files': []
+            }) + '\n'
+
+            # Check each file
+            for file_path in common_files:
+                # Send current file being checked
+                yield json.dumps({
+                    'total_files': total_files,
+                    'total_files_checked': len(checked_files),
+                    'files_found': len(found_files),
+                    'checked_files': checked_files,
+                    'found_files': found_files
+                }) + '\n'
+
+                try:
+                    url = f"{base_url.rstrip('/')}/{file_path.lstrip('/')}"
+                    response = requests.head(
+                        url,
+                        proxies={'http': proxy_address, 'https': proxy_address} if use_proxy else None,
+                        verify=verify_cert,
+                        timeout=5
+                    )
+                    
+                    success = response.status_code == 200
+                    if success:
+                        # If successful, get the full response to check content
+                        response = requests.get(
+                            url,
+                            proxies={'http': proxy_address, 'https': proxy_address} if use_proxy else None,
+                            verify=verify_cert,
+                            timeout=5
+                        )
+                        found_files.append({
+                            "file_path": file_path,
+                            "url": url,
+                            "response_length": len(response.content)
+                        })
+                    
+                    checked_files.append({
+                        'file_path': file_path,
+                        'success': success,
+                        'status_code': response.status_code,
+                        'response_length': len(response.content) if success else None
+                    })
+
+                    # Send progress update
+                    yield json.dumps({
+                        'total_files': total_files,
+                        'total_files_checked': len(checked_files),
+                        'files_found': len(found_files),
+                        'checked_files': checked_files,
+                        'found_files': found_files
+                    }) + '\n'
+
+                except Exception as e:
+                    checked_files.append({
+                        'file_path': file_path,
+                        'success': False,
+                        'status_code': None,
+                        'error': str(e)
+                    })
+                    # Send progress update with error
+                    yield json.dumps({
+                        'total_files': total_files,
+                        'total_files_checked': len(checked_files),
+                        'files_found': len(found_files),
+                        'checked_files': checked_files,
+                        'found_files': found_files
+                    }) + '\n'
+
+        return Response(generate(), mimetype='text/event-stream')
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/run_testssl', methods=['POST'])
 def run_testssl():
