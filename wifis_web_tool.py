@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, session
+from flask import Flask, render_template, request, jsonify, session, Response, stream_with_context
 import jwt
 import json
 import requests
@@ -951,6 +951,7 @@ class Third_Party_Analysis:
                     # Remove any ANSI codes
                     line = re.sub(r'\033\[[0-9;]*m', '', line)
                     output.append(line)
+                    yield {"output": line, "done": False}
             
             # Get any remaining output
             stdout, stderr = process.communicate()
@@ -960,14 +961,19 @@ class Third_Party_Analysis:
             
             # Add any remaining output
             if stdout:
-                output.extend(stdout.splitlines())
+                for line in stdout.splitlines():
+                    line = re.sub(r'\033\[[0-9;]*m', '', line)
+                    output.append(line)
+                    yield {"output": line, "done": False}
             if stderr:
-                output.extend([f"Error: {line}" for line in stderr.splitlines()])
+                for line in stderr.splitlines():
+                    output.append(f"Error: {line}")
+                    yield {"output": f"Error: {line}", "done": False}
             
-            return {"output": output}
+            yield {"output": "", "done": True}
             
         except Exception as e:
-            return {"error": f"Failed to run TestSSL: {str(e)}"}
+            yield {"error": f"Failed to run TestSSL: {str(e)}", "done": True}
 
     def search_wayback_machine(self, url):
         try:
@@ -1006,10 +1012,14 @@ class Third_Party_Analysis:
                 "status": "searching"
             }
             
+            yield {"output": f"Starting Wayback Machine search for {domain}\nTotal pages to search: {total_pages}\n", "done": False}
+            
             while page < total_pages and len(all_results) < max_results:
                 # Update progress
                 progress["current_page"] = page
                 progress["results_found"] = len(all_results)
+                
+                yield {"output": f"Searching page {page + 1} of {total_pages}...\n", "done": False}
                 
                 # Construct the Wayback Machine CDX API URL with proper format and pagination
                 wayback_url = f"https://web.archive.org/cdx/search/cdx?url={domain}&matchType=domain&output=json&fl=timestamp,original,mimetype,statuscode,digest,length&collapse=urlkey&page={page}&pageSize={page_size}"
@@ -1020,15 +1030,14 @@ class Third_Party_Analysis:
                     
                     if response.status_code == 429:  # Too Many Requests
                         progress["status"] = "rate_limited"
+                        yield {"output": "Rate limited. Waiting 5 seconds before retrying...\n", "done": False}
                         time.sleep(5)  # Wait 5 seconds before retrying
                         continue
                     
                     if response.status_code != 200:
                         progress["status"] = "error"
-                        return {
-                            "error": f"Failed to fetch data from Wayback Machine (Status code: {response.status_code})",
-                            "progress": progress
-                        }
+                        yield {"error": f"Failed to fetch data from Wayback Machine (Status code: {response.status_code})", "done": True}
+                        return
                     
                     # Parse the JSON response
                     data = response.json()
@@ -1051,11 +1060,46 @@ class Third_Party_Analysis:
                                 "length": length
                             })
                             
+                            # Format and yield the result
+                            try:
+                                # Parse the timestamp into a datetime object
+                                date = datetime(
+                                    int(timestamp[0:4]),
+                                    int(timestamp[4:6]),
+                                    int(timestamp[6:8]),
+                                    int(timestamp[8:10]),
+                                    int(timestamp[10:12]),
+                                    int(timestamp[12:14])
+                                )
+                                
+                                # Format the result text
+                                result_text = f"\n"
+                                result_text = f"Found URL: {original}\n"
+                                result_text += f"First Archived: {date.strftime('%Y-%m-%d %H:%M:%S')}\n"
+                                result_text += f"Status: {statuscode}\n"
+                                result_text += f"Type: {mimetype}\n"
+                                result_text += f"Size: {(int(length) / 1024):.2f} KB\n"
+                                result_text += f"Archive Link: https://web.archive.org/web/{timestamp}/{original}\n"
+                                result_text += "-" * 80 + "\n"
+                                yield {"output": result_text, "done": False}
+                            except Exception as e:
+                                # If date parsing fails, just show the basic info
+                                result_text = f"\n"
+                                result_text = f"Found URL: {original}\n"
+                                result_text += f"Timestamp: {timestamp}\n"
+                                result_text += f"Status: {statuscode}\n"
+                                result_text += f"Type: {mimetype}\n"
+                                result_text += f"Size: {(int(length) / 1024):.2f} KB\n"
+                                result_text += f"Archive Link: https://web.archive.org/web/{timestamp}/{original}\n"
+                                result_text += "-" * 80 + "\n"
+                                yield {"output": result_text, "done": False}
+                            
                             # Check if we've reached the maximum results
                             if len(all_results) >= max_results:
                                 break
                             
-                        except:
+                        except Exception as e:
+                            yield {"output": f"Error processing result: {str(e)}\n", "done": False}
                             continue
                     
                     # Move to next page
@@ -1066,27 +1110,19 @@ class Third_Party_Analysis:
                     
                 except requests.Timeout:
                     progress["status"] = "timeout"
+                    yield {"output": "Request timed out. Retrying...\n", "done": False}
                     time.sleep(5)  # Wait 5 seconds before retrying
                     continue
                 except requests.RequestException as e:
                     progress["status"] = "error"
-                    return {
-                        "error": f"Failed to connect to Wayback Machine: {str(e)}",
-                        "progress": progress
-                    }
+                    yield {"error": f"Failed to connect to Wayback Machine: {str(e)}", "done": True}
+                    return
             
             progress["status"] = "completed"
-            return {
-                "total_results": len(all_results),
-                "results": all_results,
-                "progress": progress
-            }
+            yield {"output": f"\nSearch completed. Found {len(all_results)} unique URLs.\n", "done": True}
             
         except Exception as e:
-            return {
-                "error": f"Failed to search Wayback Machine: {str(e)}",
-                "progress": {"status": "error"}
-            }
+            yield {"error": f"Failed to search Wayback Machine: {str(e)}", "done": True}
 
 # Initialize the HTTP request tool
 http_tool = HTTPRequestTool()
@@ -1123,12 +1159,18 @@ def check_common_files():
 @app.route('/run_testssl', methods=['POST'])
 def run_testssl():
     data = request.get_json()
-    return jsonify(http_tool.third_party_analysis.run_testssl(data.get('domain', '')))
+    def generate():
+        for chunk in http_tool.third_party_analysis.run_testssl(data.get('domain', '')):
+            yield (json.dumps(chunk) + '\n').encode('utf-8')
+    return Response(generate(), mimetype='application/json')
 
 @app.route('/search_wayback', methods=['POST'])
 def search_wayback():
     data = request.get_json()
-    return jsonify(http_tool.third_party_analysis.search_wayback_machine(data.get('url', '')))
+    def generate():
+        for chunk in http_tool.third_party_analysis.search_wayback_machine(data.get('url', '')):
+            yield (json.dumps(chunk) + '\n').encode('utf-8')
+    return Response(generate(), mimetype='application/json')
 
 @app.route('/find_jwt', methods=['POST'])
 def find_jwt():

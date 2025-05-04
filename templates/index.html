@@ -396,6 +396,9 @@
 
         function runTestSSL() {
             const domain = document.getElementById('testsslDomain').value;
+            const resultArea = document.getElementById('testsslResult');
+            resultArea.textContent = 'Running TestSSL...\n';
+            
             fetch('/run_testssl', {
                 method: 'POST',
                 headers: {
@@ -405,18 +408,51 @@
                     domain: domain
                 })
             })
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    document.getElementById('testsslResult').textContent = data.error;
-                } else {
-                    document.getElementById('testsslResult').textContent = data.output.join('\n');
+            .then(response => {
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                
+                function readStream() {
+                    reader.read().then(({done, value}) => {
+                        if (done) {
+                            return;
+                        }
+                        
+                        const chunk = decoder.decode(value);
+                        const lines = chunk.split('\n');
+                        
+                        for (const line of lines) {
+                            if (line.trim()) {
+                                try {
+                                    const data = JSON.parse(line);
+                                    if (data.error) {
+                                        resultArea.textContent += `Error: ${data.error}\n`;
+                                    } else if (data.output) {
+                                        resultArea.textContent += data.output;
+                                        resultArea.scrollTop = resultArea.scrollHeight;
+                                    }
+                                } catch (e) {
+                                    // Skip invalid JSON
+                                }
+                            }
+                        }
+                        
+                        readStream();
+                    });
                 }
+                
+                readStream();
+            })
+            .catch(error => {
+                resultArea.textContent += `Error: ${error.message}\n`;
             });
         }
 
         function searchWayback() {
             const url = document.getElementById('waybackUrl').value;
+            const resultArea = document.getElementById('waybackResult');
+            resultArea.textContent = 'Starting Wayback Machine search...\n';
+            
             fetch('/search_wayback', {
                 method: 'POST',
                 headers: {
@@ -426,31 +462,43 @@
                     url: url
                 })
             })
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    document.getElementById('waybackResult').textContent = data.error;
-                } else {
-                    let result = `Found ${data.total_results} unique URLs:\n\n`;
-                    data.results.forEach(item => {
-                        const date = new Date(
-                            item.timestamp.substring(0, 4),
-                            item.timestamp.substring(4, 6) - 1,
-                            item.timestamp.substring(6, 8),
-                            item.timestamp.substring(8, 10),
-                            item.timestamp.substring(10, 12),
-                            item.timestamp.substring(12, 14)
-                        );
-                        result += `URL: ${item.original}\n`;
-                        result += `First Archived: ${date.toLocaleString()}\n`;
-                        result += `Status: ${item.statuscode}\n`;
-                        result += `Type: ${item.mimetype}\n`;
-                        result += `Size: ${(parseInt(item.length) / 1024).toFixed(2)} KB\n`;
-                        result += `Archive Link: https://web.archive.org/web/${item.timestamp}/${item.original}\n`;
-                        result += "-".repeat(80) + "\n\n";
+            .then(response => {
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                
+                function readStream() {
+                    reader.read().then(({done, value}) => {
+                        if (done) {
+                            return;
+                        }
+                        
+                        const chunk = decoder.decode(value);
+                        const lines = chunk.split('\n');
+                        
+                        for (const line of lines) {
+                            if (line.trim()) {
+                                try {
+                                    const data = JSON.parse(line);
+                                    if (data.error) {
+                                        resultArea.textContent += `Error: ${data.error}\n`;
+                                    } else if (data.output) {
+                                        resultArea.textContent += data.output;
+                                        resultArea.scrollTop = resultArea.scrollHeight;
+                                    }
+                                } catch (e) {
+                                    // Skip invalid JSON
+                                }
+                            }
+                        }
+                        
+                        readStream();
                     });
-                    document.getElementById('waybackResult').textContent = result;
                 }
+                
+                readStream();
+            })
+            .catch(error => {
+                resultArea.textContent += `Error: ${error.message}\n`;
             });
         }
 
