@@ -166,7 +166,7 @@
                 </div>
                 <div class="row mt-3">
                     <div class="col-md-12">
-                        <h4>Security Findings</h4>
+                        <h4>Output</h4>
                         <div id="securityFindings" class="form-control monospace response-area">
                             <div class="text-muted">Click "Header Analysis" to see security findings...</div>
                         </div>
@@ -378,7 +378,7 @@
 
             const securityFindings = document.getElementById('securityFindings');
             securityFindings.innerHTML = '<div class="text-center"><i class="bi bi-arrow-repeat spin"></i> Checking common files...</div>';
-            document.querySelector('#securityFindings').previousElementSibling.textContent = 'Common File Check';
+            document.querySelector('#securityFindings').previousElementSibling.textContent = 'Output';
 
             fetch('/check_common_files', {
                 method: 'POST',
