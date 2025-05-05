@@ -1,4 +1,7 @@
-PyJWT
+flask
 requests
+pyjwt
 cryptography
+python-dotenv
+pytest
 
