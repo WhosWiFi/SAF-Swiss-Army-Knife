@@ -12,9 +12,12 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
 import time
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)  # Required for session management
+app.secret_key = os.getenv('APP_SECRET_KEY')
 
 class HTTPRequestTool:
     def __init__(self):
@@ -1444,4 +1447,4 @@ def analyze_headers():
     return jsonify(http_tool.analyze_headers(data.get('request_text', '')))
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run()
