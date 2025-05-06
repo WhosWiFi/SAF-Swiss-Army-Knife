@@ -1039,61 +1039,6 @@ class Third_Party_Analysis:
     def __init__(self, http_request_tool):
         self.http_request_tool = http_request_tool
     
-    def run_testssl(self, domain):
-        try:
-            # Store current directory
-            current_dir = os.getcwd()
-            
-            # Change to testssl directory
-            os.chdir('testssl')
-            
-            # Make sure testssl.sh is executable
-            os.chmod('testssl.sh', 0o755)
-            
-            # Run testssl.sh with HTML output using system OpenSSL
-            process = subprocess.Popen(
-                ['./testssl.sh', '--html', domain],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                bufsize=1,
-                universal_newlines=True
-            )
-            
-            # Read output in real-time
-            output = []
-            while True:
-                line = process.stdout.readline()
-                if line == '' and process.poll() is not None:
-                    break
-                if line:
-                    # Remove any ANSI codes
-                    line = re.sub(r'\033\[[0-9;]*m', '', line)
-                    output.append(line)
-                    yield {"output": line, "done": False}
-            
-            # Get any remaining output
-            stdout, stderr = process.communicate()
-            
-            # Change back to original directory
-            os.chdir(current_dir)
-            
-            # Add any remaining output
-            if stdout:
-                for line in stdout.splitlines():
-                    line = re.sub(r'\033\[[0-9;]*m', '', line)
-                    output.append(line)
-                    yield {"output": line, "done": False}
-            if stderr:
-                for line in stderr.splitlines():
-                    output.append(f"Error: {line}")
-                    yield {"output": f"Error: {line}", "done": False}
-            
-            yield {"output": "", "done": True}
-            
-        except Exception as e:
-            yield {"error": f"Failed to run TestSSL: {str(e)}", "done": True}
-
     def search_wayback_machine(self, url):
         try:
             # Extract domain from URL
@@ -1372,14 +1317,6 @@ def check_common_files():
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
-@app.route('/run_testssl', methods=['POST'])
-def run_testssl():
-    data = request.get_json()
-    def generate():
-        for chunk in http_tool.third_party_analysis.run_testssl(data.get('domain', '')):
-            yield (json.dumps(chunk) + '\n').encode('utf-8')
-    return Response(generate(), mimetype='application/json')
 
 @app.route('/search_wayback', methods=['POST'])
 def search_wayback():

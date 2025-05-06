@@ -238,15 +238,7 @@
             <!-- Third Party Analysis Tab -->
             <div class="tab-pane fade" id="analysis" role="tabpanel">
                 <div class="row">
-                    <div class="col-md-6">
-                        <h4>TestSSL</h4>
-                        <div class="input-group mb-3">
-                            <input type="text" id="testsslDomain" class="form-control" placeholder="Enter domain">
-                            <button class="btn btn-primary" onclick="runTestSSL()">Run TestSSL</button>
-                        </div>
-                        <div id="testsslResult" class="form-control monospace response-area"></div>
-                    </div>
-                    <div class="col-md-6">
+                    <div class="col-md-12">
                         <h4>Wayback Machine</h4>
                         <div class="input-group mb-3">
                             <input type="text" id="waybackUrl" class="form-control" placeholder="Enter URL">
@@ -469,60 +461,6 @@
             })
             .catch(error => {
                 securityFindings.innerHTML = `<div class="text-danger">Error: ${error.message}</div>`;
-            });
-        }
-
-        function runTestSSL() {
-            const domain = document.getElementById('testsslDomain').value;
-            const resultArea = document.getElementById('testsslResult');
-            resultArea.textContent = 'Running TestSSL...\n';
-            
-            fetch('/run_testssl', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    domain: domain
-                })
-            })
-            .then(response => {
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-                
-                function readStream() {
-                    reader.read().then(({done, value}) => {
-                        if (done) {
-                            return;
-                        }
-                        
-                        const chunk = decoder.decode(value);
-                        const lines = chunk.split('\n');
-                        
-                        for (const line of lines) {
-                            if (line.trim()) {
-                                try {
-                                    const data = JSON.parse(line);
-                                    if (data.error) {
-                                        resultArea.textContent += `Error: ${data.error}\n`;
-                                    } else if (data.output) {
-                                        resultArea.textContent += data.output;
-                                        resultArea.scrollTop = resultArea.scrollHeight;
-                                    }
-                                } catch (e) {
-                                    // Skip invalid JSON
-                                }
-                            }
-                        }
-                        
-                        readStream();
-                    });
-                }
-                
-                readStream();
-            })
-            .catch(error => {
-                resultArea.textContent += `Error: ${error.message}\n`;
             });
         }
 
