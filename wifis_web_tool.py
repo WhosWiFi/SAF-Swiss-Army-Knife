@@ -1191,7 +1191,7 @@ def check_common_files():
         request_text = data.get('request_text', '')
         use_proxy = data.get('use_proxy', False)
         proxy_address = data.get('proxy_address', '')
-        verify = data.get('verify', False)
+        verify = data.get('verify', True)
 
         if not request_text:
             return jsonify({'error': 'No request text provided'}), 400
