@@ -27,8 +27,8 @@ class HTTPRequestTool:
         
         # Load header information from JSON file
         try:
-            with open('http_headers.json', 'r', encoding='utf-8') as f:
-                header_data = json.load(f)
+            with open('http_headers.json', 'r', encoding='utf-8') as http_headers_file:
+                header_data = json.load(http_headers_file)
                 self.request_headers = header_data['request_headers']
                 self.response_headers = header_data['response_headers']
         except Exception as e:
@@ -38,13 +38,13 @@ class HTTPRequestTool:
         
         # Load common files from common_files.txt
         try:
-            with open('common_files.txt', 'r', encoding='utf-8') as f:
-                self.common_files = [line.strip() for line in f if line.strip()]
+            with open('common_files.txt', 'r', encoding='utf-8') as common_files_file:
+                self.common_files = [line.strip() for line in common_files_file if line.strip()]
         except Exception as e:
             print(f"Failed to load common files: {str(e)}")
             self.common_files = []
 
-    def check_common_files(self, request_text, use_proxy=False, proxy_address=None, verify_cert=True):
+    def check_common_files(self, request_text, use_proxy=False, proxy_address=None, verify=True):
         try:
             # Parse the request to get the base URL
             request_lines = request_text.split('\n')
@@ -85,7 +85,6 @@ class HTTPRequestTool:
             
             # Configure proxy if enabled
             proxies = None
-            verify = True
             if use_proxy:
                 if not proxy_address:
                     return {"error": "Please enter a proxy address"}
@@ -93,7 +92,6 @@ class HTTPRequestTool:
                     'http': proxy_address,
                     'https': proxy_address
                 }
-                verify = verify_cert
             
             # Load common files to check
             with open('common_files.txt', 'r') as f:
@@ -148,7 +146,7 @@ class HTTPRequestTool:
         except Exception as e:
             return {"error": f"Failed to check common files: {str(e)}"}
 
-    def process_request(self, request_text, use_proxy=False, proxy_address=None, verify_cert=True):
+    def process_request(self, request_text, use_proxy=False, proxy_address=None, verify=True):
         try:
             # Parse the raw HTTP request
             request_lines = request_text.split('\n')
@@ -194,7 +192,6 @@ class HTTPRequestTool:
             
             # Configure proxy if enabled
             proxies = None
-            verify = True
             if use_proxy:
                 if not proxy_address:
                     return {"error": "Please enter a proxy address"}
@@ -207,7 +204,6 @@ class HTTPRequestTool:
                     'http': proxy_address,
                     'https': proxy_address
                 }
-                verify = verify_cert
                 
                 # Test proxy connection
                 try:
@@ -215,7 +211,7 @@ class HTTPRequestTool:
                 except requests.exceptions.ProxyError:
                     return {"error": "Could not connect to Burp Suite proxy. Please ensure Burp Suite is running and listening on the specified port."}
                 except requests.exceptions.SSLError:
-                    return {"error": "SSL verification failed. Try unchecking 'Verify Proxy Cert' or importing Burp Suite's CA certificate."}
+                    return {"error": "SSL verification failed. Try unchecking 'Verify SSL' or importing Burp Suite's CA certificate."}
                 except Exception as e:
                     return {"error": f"Error connecting to proxy: {str(e)}"}
             
@@ -507,7 +503,7 @@ class JWTAttacks:
 
         return tokens
 
-    def unverified_signature_attack(self, token, request_text, use_proxy=False, proxy_address=None, verify_cert=True):
+    def unverified_signature_attack(self, token, request_text, use_proxy=False, proxy_address=None, verify=True):
         try:
             # Decode the JWT without verification
             header = jwt.get_unverified_header(token)
@@ -532,7 +528,7 @@ class JWTAttacks:
                 modified_request,
                 use_proxy=use_proxy,
                 proxy_address=proxy_address,
-                verify_cert=verify_cert
+                verify=verify
             )
 
             # Get the response status code
@@ -554,7 +550,7 @@ class JWTAttacks:
         except Exception as e:
             return {"error": f"Failed to perform unverified signature attack: {str(e)}"}
 
-    def none_signature_attack(self, token, request_text, use_proxy=False, proxy_address=None, verify_cert=True):
+    def none_signature_attack(self, token, request_text, use_proxy=False, proxy_address=None, verify=True):
         try:
             # Decode the JWT without verification
             header = jwt.get_unverified_header(token)
@@ -586,7 +582,7 @@ class JWTAttacks:
                         modified_request,
                         use_proxy=use_proxy,
                         proxy_address=proxy_address,
-                        verify_cert=verify_cert
+                        verify=verify
                     )
 
                     # Get the response status code
@@ -778,7 +774,7 @@ class JWTAttacks:
         except Exception as e:
             return {"error": f"Failed to perform JWK header injection attack: {str(e)}"}
 
-    def kid_header_traversal(self, token, request_text, use_proxy=False, proxy_address=None, verify_cert=True):
+    def kid_header_traversal(self, token, request_text, use_proxy=False, proxy_address=None, verify=True):
         try:
             # Decode the JWT without verification
             header = jwt.get_unverified_header(token)
@@ -826,7 +822,7 @@ class JWTAttacks:
                     modified_request,
                     use_proxy=use_proxy,
                     proxy_address=proxy_address,
-                    verify_cert=verify_cert
+                    verify=verify
                 )
 
                 # Get the response status code
@@ -993,7 +989,7 @@ class Tools:
     def generate_clickjack(self, url):
         clickjack_html = f"""<html>
    <head>
-      <title>Aon Clickjacking Example PoC</title>
+      <title>Clickjacking Example PoC</title>
       <style>
          body {{
             font-family: Arial, sans-serif;
@@ -1180,7 +1176,7 @@ def process_request():
         data.get('request_text', ''),
         data.get('use_proxy', False),
         data.get('proxy_address'),
-        data.get('verify_cert', True)
+        data.get('verify', True)
     ))
 
 @app.route('/generate_clickjack', methods=['POST'])
@@ -1195,7 +1191,7 @@ def check_common_files():
         request_text = data.get('request_text', '')
         use_proxy = data.get('use_proxy', False)
         proxy_address = data.get('proxy_address', '')
-        verify_cert = data.get('verify_cert', False)
+        verify = data.get('verify', False)
 
         if not request_text:
             return jsonify({'error': 'No request text provided'}), 400
@@ -1262,7 +1258,7 @@ def check_common_files():
                     response = requests.head(
                         url,
                         proxies={'http': proxy_address, 'https': proxy_address} if use_proxy else None,
-                        verify=verify_cert,
+                        verify=verify,
                         timeout=5
                     )
                     
@@ -1272,7 +1268,7 @@ def check_common_files():
                         response = requests.get(
                             url,
                             proxies={'http': proxy_address, 'https': proxy_address} if use_proxy else None,
-                            verify=verify_cert,
+                            verify=verify,
                             timeout=5
                         )
                         found_files.append({
@@ -1355,22 +1351,22 @@ def jwt_attack(attack_type):
     request_text = data.get('request_text', '')
     use_proxy = data.get('use_proxy', False)
     proxy_address = data.get('proxy_address')
-    verify_cert = data.get('verify_cert', True)
+    verify = data.get('verify', True)
 
     if attack_type == 'unverified_sig':
         result = http_tool.jwt_attacks.unverified_signature_attack(
-            token, request_text, use_proxy, proxy_address, verify_cert
+            token, request_text, use_proxy, proxy_address, verify
         )
     elif attack_type == 'none_sig':
         result = http_tool.jwt_attacks.none_signature_attack(
-            token, request_text, use_proxy, proxy_address, verify_cert
+            token, request_text, use_proxy, proxy_address, verify
         )
     elif attack_type == 'brute_force':
         result = http_tool.jwt_attacks.brute_force_secret(token)
     elif attack_type == 'jwk_injection':
         result = http_tool.jwt_attacks.jwk_header_injection(token)
     elif attack_type == 'kid_traversal':
-        result = http_tool.jwt_attacks.kid_header_traversal(token, request_text, use_proxy, proxy_address, verify_cert)
+        result = http_tool.jwt_attacks.kid_header_traversal(token, request_text, use_proxy, proxy_address, verify)
     elif attack_type == 'algorithm_confusion':
         result = http_tool.jwt_attacks.algorithm_confusion(token)
     else:

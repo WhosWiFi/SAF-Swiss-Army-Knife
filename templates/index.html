@@ -103,9 +103,7 @@
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container">
-            <a class="navbar-brand" href="#">HTTP Request Tool</a>
-        </div>
+        <a class="navbar-brand ms-3" href="/">HTTP Request Tool</a>
     </nav>
 
     <div class="container-fluid mt-4">
@@ -155,8 +153,8 @@
                                 <input type="text" id="proxyAddress" class="form-control" placeholder="Proxy Address (e.g., http://127.0.0.1:8080)" disabled>
                             </div>
                             <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="verifyCert">
-                                <label class="form-check-label" for="verifyCert">Verify Proxy Certificate</label>
+                                <input class="form-check-input" type="checkbox" id="verify">
+                                <label class="form-check-label" for="verify">Verify SSL</label>
                             </div>
                             <button class="btn btn-secondary" onclick="checkCommonFiles()">Check Common Files</button>
                             <button class="btn btn-info" onclick="analyzeHeaders()">Header Analysis</button>
@@ -320,7 +318,10 @@
             const requestText = document.getElementById('requestText').value;
             const useProxy = document.getElementById('useProxy').checked;
             const proxyAddress = document.getElementById('proxyAddress').value;
-            const verifyCert = document.getElementById('verifyCert').checked;
+            const verify = document.getElementById('verify').checked;
+
+            // Clear previous response
+            document.getElementById('responseText').textContent = 'Sending request...';
 
             fetch('/process_request', {
                 method: 'POST',
@@ -331,16 +332,25 @@
                     request_text: requestText,
                     use_proxy: useProxy,
                     proxy_address: proxyAddress,
-                    verify_cert: verifyCert
+                    verify: verify
                 })
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.error) {
-                    document.getElementById('responseText').textContent = data.error;
+                    document.getElementById('responseText').textContent = `Error: ${data.error}`;
                 } else {
                     document.getElementById('responseText').textContent = data.response;
                 }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('responseText').textContent = `Error: ${error.message}`;
             });
         }
 
@@ -365,7 +375,7 @@
             const requestText = document.getElementById('requestText').value;
             const useProxy = document.getElementById('useProxy').checked;
             const proxyAddress = document.getElementById('proxyAddress').value;
-            const verifyCert = document.getElementById('verifyCert').checked;
+            const verify = document.getElementById('verify').checked;
 
             const securityFindings = document.getElementById('securityFindings');
             securityFindings.innerHTML = '<div class="text-center"><i class="bi bi-arrow-repeat spin"></i> Checking common files...</div>';
@@ -380,7 +390,7 @@
                     request_text: requestText,
                     use_proxy: useProxy,
                     proxy_address: proxyAddress,
-                    verify_cert: verifyCert
+                    verify: verify
                 })
             })
             .then(response => {
@@ -529,7 +539,7 @@
             // Get proxy settings
             const useProxy = document.getElementById('useProxy').checked;
             const proxyAddress = document.getElementById('proxyAddress').value;
-            const verifyCert = document.getElementById('verifyCert').checked;
+            const verify = document.getElementById('verify').checked;
 
             // Find JWT tokens in the request
             fetch('/find_jwt', {
@@ -609,7 +619,7 @@
                                 request_text: requestText,
                                 use_proxy: useProxy,
                                 proxy_address: proxyAddress,
-                                verify_cert: verifyCert
+                                verify: verify
                             })
                         })
                         .then(response => response.json())
@@ -846,6 +856,124 @@
                 // Analyze security findings
                 let securityFindingsHtml = '<div class="mb-3">Security Findings:</div>';
                 
+                // Information Disclosure and Fingerprinting Detection
+                const fingerprintingFindings = [];
+                
+                // Server Software Detection
+                const serverHeader = responseHeaders.find(h => h.header.toLowerCase() === 'server');
+                if (serverHeader) {
+                    const serverValue = serverHeader.value.toLowerCase();
+                    let serverInfo = {
+                        type: 'danger',
+                        title: 'Server Information Disclosure',
+                        details: `Server software revealed: ${serverHeader.value}`
+                    };
+
+                    // Detect specific server types
+                    if (serverValue.includes('apache')) {
+                        serverInfo.details += '\nDetected: Apache Web Server';
+                        if (serverValue.includes('2.4')) serverInfo.details += ' (Version 2.4)';
+                        if (serverValue.includes('2.2')) serverInfo.details += ' (Version 2.2)';
+                    } else if (serverValue.includes('nginx')) {
+                        serverInfo.details += '\nDetected: Nginx Web Server';
+                    } else if (serverValue.includes('iis')) {
+                        serverInfo.details += '\nDetected: Microsoft IIS';
+                        if (serverValue.includes('10.0')) serverInfo.details += ' (Version 10.0)';
+                        if (serverValue.includes('8.5')) serverInfo.details += ' (Version 8.5)';
+                    }
+                    fingerprintingFindings.push(serverInfo);
+                }
+
+                // Framework Detection
+                const poweredByHeader = responseHeaders.find(h => h.header.toLowerCase() === 'x-powered-by');
+                if (poweredByHeader) {
+                    const poweredByValue = poweredByHeader.value.toLowerCase();
+                    let frameworkInfo = {
+                        type: 'danger',
+                        title: 'Framework Information Disclosure',
+                        details: `Framework revealed: ${poweredByHeader.value}`
+                    };
+
+                    // Detect specific frameworks
+                    if (poweredByValue.includes('php')) {
+                        frameworkInfo.details += '\nDetected: PHP';
+                        const phpVersion = poweredByValue.match(/php\/(\d+\.\d+)/i);
+                        if (phpVersion) frameworkInfo.details += ` (Version ${phpVersion[1]})`;
+                    } else if (poweredByValue.includes('asp.net')) {
+                        frameworkInfo.details += '\nDetected: ASP.NET';
+                    } else if (poweredByValue.includes('express')) {
+                        frameworkInfo.details += '\nDetected: Node.js Express';
+                    }
+                    fingerprintingFindings.push(frameworkInfo);
+                }
+
+                // Session Cookie Analysis
+                const setCookieHeaders = responseHeaders.filter(h => h.header.toLowerCase() === 'set-cookie');
+                setCookieHeaders.forEach(header => {
+                    const value = header.value.toLowerCase();
+                    if (value.includes('jsessionid')) {
+                        fingerprintingFindings.push({
+                            type: 'warning',
+                            title: 'Java Application Detected',
+                            details: 'JSESSIONID cookie indicates Java-based application (likely J2EE/Jakarta EE)'
+                        });
+                    } else if (value.includes('phpsessid')) {
+                        fingerprintingFindings.push({
+                            type: 'warning',
+                            title: 'PHP Application Detected',
+                            details: 'PHPSESSID cookie indicates PHP-based application'
+                        });
+                    } else if (value.includes('wordpress') || value.includes('wp-')) {
+                        fingerprintingFindings.push({
+                            type: 'warning',
+                            title: 'WordPress Detected',
+                            details: 'WordPress-specific cookie detected'
+                        });
+                    } else if (value.includes('laravel_session')) {
+                        fingerprintingFindings.push({
+                            type: 'warning',
+                            title: 'Laravel Framework Detected',
+                            details: 'Laravel session cookie detected'
+                        });
+                    }
+                });
+
+                // X-AspNet-Version Detection
+                const aspNetVersion = responseHeaders.find(h => h.header.toLowerCase() === 'x-aspnet-version');
+                if (aspNetVersion) {
+                    fingerprintingFindings.push({
+                        type: 'danger',
+                        title: 'ASP.NET Version Disclosure',
+                        details: `ASP.NET version revealed: ${aspNetVersion.value}`
+                    });
+                }
+
+                // X-Runtime Detection
+                const xRuntime = responseHeaders.find(h => h.header.toLowerCase() === 'x-runtime');
+                if (xRuntime) {
+                    fingerprintingFindings.push({
+                        type: 'warning',
+                        title: 'Ruby on Rails Detected',
+                        details: 'X-Runtime header indicates Ruby on Rails application'
+                    });
+                }
+
+                // Display all fingerprinting findings
+                if (fingerprintingFindings.length > 0) {
+                    securityFindingsHtml += `<div class="security-finding danger">
+                        <h5><i class="bi bi-exclamation-triangle-fill"></i> Information Disclosure & Fingerprinting</h5>
+                        <div class="mt-2">`;
+                    
+                    fingerprintingFindings.forEach(finding => {
+                        securityFindingsHtml += `<div class="mb-2">
+                            <strong>${finding.title}</strong>
+                            <p class="mb-1">${finding.details}</p>
+                        </div>`;
+                    });
+                    
+                    securityFindingsHtml += `</div></div>`;
+                }
+
                 // Check for missing security headers
                 const requiredHeaders = [
                     'Strict-Transport-Security',
@@ -886,15 +1014,6 @@
                     </div>`;
                 }
 
-                // Check for Server header
-                const serverHeader = responseHeaders.find(h => h.header.toLowerCase() === 'server');
-                if (serverHeader) {
-                    securityFindingsHtml += `<div class="security-finding danger">
-                        <h5><i class="bi bi-exclamation-triangle-fill"></i> Server Information Disclosure</h5>
-                        <p>The Server header reveals server information: ${serverHeader.value}</p>
-                    </div>`;
-                }
-
                 // Check for Via header
                 const viaHeader = responseHeaders.find(h => h.header.toLowerCase() === 'via');
                 if (viaHeader) {
@@ -905,8 +1024,8 @@
                 }
 
                 // Check for Set-Cookie security flags
-                const setCookieHeaders = responseHeaders.filter(h => h.header.toLowerCase() === 'set-cookie');
-                setCookieHeaders.forEach(header => {
+                const cookieSecurityHeaders = responseHeaders.filter(h => h.header.toLowerCase() === 'set-cookie');
+                cookieSecurityHeaders.forEach(header => {
                     const value = header.value.toLowerCase();
                     const issues = [];
                     
