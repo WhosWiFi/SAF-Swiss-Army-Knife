@@ -69,7 +69,6 @@ class HTTPRequestTool:
                 if not host:
                     return {"error": "Could not determine host"}
                 
-                # Always use HTTPS
                 full_url = f"https://{host}{full_url}"
             
             # Parse URL to get base
@@ -161,7 +160,6 @@ class HTTPRequestTool:
             method = first_line[0]
             path = first_line[1]
             
-            # Parse headers
             headers = {}
             current_line = 1
             while current_line < len(request_lines) and request_lines[current_line].strip():
@@ -171,22 +169,18 @@ class HTTPRequestTool:
                     headers[key.strip()] = value.strip()
                 current_line += 1
             
-            # Get body if exists (after blank line)
             body = None
             if current_line < len(request_lines):
                 body = '\n'.join(request_lines[current_line + 1:]).strip()
             
-            # Parse URL and enforce HTTPS
             if not path.startswith('http'):
                 # If host header exists, use it to construct full URL
                 host = headers.get('Host', '')
                 if host:
-                    # Always use HTTPS
                     path = f"https://{host}{path}"
                 else:
                     return {"error": "No host specified in headers and path is not absolute URL"}
             else:
-                # If URL starts with http://, change it to https://
                 if path.startswith('http://'):
                     path = path.replace('http://', 'https://', 1)
             
@@ -196,7 +190,6 @@ class HTTPRequestTool:
                 if not proxy_address:
                     return {"error": "Please enter a proxy address"}
                 
-                # Ensure proxy address is properly formatted for Burp Suite
                 if not proxy_address.startswith(('http://', 'https://')):
                     proxy_address = 'http://' + proxy_address
                 
@@ -204,16 +197,6 @@ class HTTPRequestTool:
                     'http': proxy_address,
                     'https': proxy_address
                 }
-                
-                # Test proxy connection
-                try:
-                    test_response = requests.get('https://example.com', proxies=proxies, verify=verify, timeout=5)
-                except requests.exceptions.ProxyError:
-                    return {"error": "Could not connect to Burp Suite proxy. Please ensure Burp Suite is running and listening on the specified port."}
-                except requests.exceptions.SSLError:
-                    return {"error": "SSL verification failed. Try unchecking 'Verify SSL' or importing Burp Suite's CA certificate."}
-                except Exception as e:
-                    return {"error": f"Error connecting to proxy: {str(e)}"}
             
             # Send the request
             response = requests.request(
@@ -223,17 +206,15 @@ class HTTPRequestTool:
                 data=body,
                 verify=verify,
                 proxies=proxies,
-                allow_redirects=False  # Don't follow redirects to see the actual response
+                allow_redirects=False 
             )
             
-            # Format response like Burp Suite
             response_text = f"HTTP/{response.raw.version / 10.0} {response.status_code} {response.reason}\r\n"
             for key, value in response.headers.items():
                 response_text += f"{key}: {value}\r\n"
             response_text += "\r\n"
             response_text += response.text
             
-            # Find JWT tokens in the request
             jwt_tokens = self.jwt_attacks.find_jwt(request_text)
             jwt_decoded = ""
             if jwt_tokens:
