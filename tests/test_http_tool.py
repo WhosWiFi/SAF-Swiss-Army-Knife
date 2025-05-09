@@ -113,4 +113,5 @@ def test_analyze_headers():
         mock_open.side_effect = FileNotFoundError("File not found")
         request_text = ""
         result = tool.analyze_headers(request_text)
-        assert 'error' in result                                                                                            
+        assert 'error' in result                      
+
