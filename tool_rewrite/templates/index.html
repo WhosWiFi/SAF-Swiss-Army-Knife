@@ -359,11 +359,11 @@
                 <div class="row">
                     <div class="col-md-4">
                         <h4>Request</h4>
-                        <textarea id="requestText" class="form-control monospace response-area"></textarea>
+                        <textarea id="request" class="form-control monospace response-area"></textarea>
                     </div>
                     <div class="col-md-4">
                         <h4>Response</h4>
-                        <div id="responseText" class="form-control monospace response-area"></div>
+                        <div id="response" class="form-control monospace response-area"></div>
                         <div id="commonFilesResult" class="form-control monospace response-area mt-3" style="display: none;"></div>
                     </div>
                     <div class="col-md-4">
@@ -383,6 +383,10 @@
                             <div class="form-check">
                                 <input class="form-check-input" type="checkbox" id="useProxy">
                                 <label class="form-check-label" for="useProxy">Use Proxy</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="verifySsl" checked>
+                                <label class="form-check-label" for="verifySsl">Verify SSL</label>
                             </div>
                             <div class="flex-grow-1">
                                 <div class="input-group">
@@ -525,9 +529,49 @@
         document.addEventListener('DOMContentLoaded', function() {
             const useHttpCheckbox = document.getElementById('useHttp');
             const useProxyCheckbox = document.getElementById('useProxy');
+            const verifySslCheckbox = document.getElementById('verifySsl');
             const proxyAddress = document.getElementById('proxyAddress');
             const addProxyBtn = document.getElementById('addProxy');
             const proxyList = document.getElementById('proxyList');
+            
+            // Toggle HTTP
+            useHttpCheckbox.addEventListener('change', function() {
+                fetch('/toggle_http', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        use_http: this.checked
+                    })
+                });
+            });
+
+            // Toggle Proxy
+            useProxyCheckbox.addEventListener('change', function() {
+                fetch('/toggle_proxy', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        use_proxy: this.checked
+                    })
+                });
+            });
+
+            // Toggle SSL Verification
+            verifySslCheckbox.addEventListener('change', function() {
+                fetch('/toggle_verify_ssl', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        verify_ssl: this.checked
+                    })
+                });
+            });
             
             // Add proxy
             addProxyBtn.addEventListener('click', function() {
@@ -558,21 +602,6 @@
                 });
             });
 
-            // Update proxy list display
-            function updateProxyList(proxies) {
-                proxyList.innerHTML = '';
-                Object.entries(proxies).forEach(([protocol, url]) => {
-                    const proxyItem = document.createElement('div');
-                    proxyItem.className = 'proxy-item d-flex align-items-center gap-2 mt-2';
-                    proxyItem.innerHTML = `
-                        <span class="badge">${protocol}</span>
-                        <span>${url}</span>
-                        <button class="btn btn-danger btn-sm" onclick="removeProxy('${protocol}')">Remove</button>
-                    `;
-                    proxyList.appendChild(proxyItem);
-                });
-            }
-
             // Remove proxy
             window.removeProxy = function(protocol) {
                 fetch('/remove_proxy', {
@@ -588,6 +617,19 @@
                 .then(data => {
                     if (data.status === 'success') {
                         updateProxyList(data.proxies);
+                        // If no proxies left, uncheck the proxy checkbox
+                        if (Object.keys(data.proxies).length === 0) {
+                            useProxyCheckbox.checked = false;
+                            fetch('/toggle_proxy', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({
+                                    use_proxy: false
+                                })
+                            });
+                        }
                     } else {
                         alert(data.error || 'Failed to remove proxy');
                     }
@@ -598,11 +640,34 @@
                 });
             };
 
+            // Update proxy list display
+            function updateProxyList(proxies) {
+                proxyList.innerHTML = '';
+                if (Object.keys(proxies).length === 0) {
+                    proxyList.innerHTML = '<div class="text-muted">No proxies configured</div>';
+                    return;
+                }
+                Object.entries(proxies).forEach(([protocol, url]) => {
+                    const proxyItem = document.createElement('div');
+                    proxyItem.className = 'proxy-item d-flex align-items-center gap-2 mt-2';
+                    proxyItem.innerHTML = `
+                        <span class="badge">${protocol}</span>
+                        <span>${url}</span>
+                        <button class="btn btn-danger btn-sm" onclick="removeProxy('${protocol}')">Remove</button>
+                    `;
+                    proxyList.appendChild(proxyItem);
+                });
+            }
+
             // Load existing proxies on page load
             fetch('/get_proxies')
                 .then(response => response.json())
                 .then(data => {
                     updateProxyList(data.proxies);
+                    // Set initial checkbox states
+                    useHttpCheckbox.checked = data.use_http;
+                    useProxyCheckbox.checked = data.use_proxy;
+                    verifySslCheckbox.checked = data.verify_ssl;
                 })
                 .catch(error => {
                     console.error('Error loading proxies:', error);
@@ -617,6 +682,34 @@
                     checkbox.checked = !checkbox.checked;
                 }
                 this.classList.toggle('selected', this.querySelector('input[type="checkbox"]').checked);
+            });
+        });
+
+        // Send Request functionality
+        document.querySelector('.btn-primary').addEventListener('click', function() {
+            const request = document.getElementById('request').value;
+            const response = document.getElementById('response');
+            
+            fetch('/send_request', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    request: request
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    response.textContent = `Error: ${data.error}`;
+                } else {
+                    response.textContent = data.response;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                response.textContent = `Error: ${error.message}`;
             });
         });
 

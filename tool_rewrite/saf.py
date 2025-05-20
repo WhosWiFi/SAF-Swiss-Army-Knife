@@ -22,6 +22,91 @@ class Config(object):
     def __init__(self):
         pass
     
+    def send_request(self, request_text):
+        try:
+            # Parse the raw HTTP request
+            request_lines = request_text.split('\n')
+            if not request_lines:
+                return {"error": "Empty request"}
+
+            # Parse first line (method, path, version)
+            first_line = request_lines[0].split()
+            if len(first_line) < 2:
+                return {"error": "Invalid request format"}
+            
+            method = first_line[0]
+            path = first_line[1]
+            
+            headers = {}
+            current_line = 1
+            while current_line < len(request_lines) and request_lines[current_line].strip():
+                header_line = request_lines[current_line].strip()
+                if ':' in header_line:
+                    key, value = header_line.split(':', 1)
+                    headers[key.strip()] = value.strip()
+                current_line += 1
+            
+            body = None
+            if current_line < len(request_lines):
+                body = '\n'.join(request_lines[current_line + 1:]).strip()
+            
+            if not path.startswith('http'):
+                # If host header exists, use it to construct full URL
+                host = headers.get('Host', '')
+                if host:
+                    protocol = 'http://' if USE_HTTP else 'https://'
+                    path = f"{protocol}{host}{path}"
+                else:
+                    return {"error": "No host specified in headers and path is not absolute URL"}
+            else:
+                if not USE_HTTP and path.startswith('http://'):
+                    path = path.replace('http://', 'https://', 1)
+                elif USE_HTTP and path.startswith('https://'):
+                    path = path.replace('https://', 'http://', 1)
+            
+            # Configure proxy if enabled
+            proxies = None
+            if USE_PROXY:
+                if not PROXIES:
+                    return {"error": "No proxies configured"}
+                
+                # Use the first proxy from PROXIES
+                proxy_address = next(iter(PROXIES.values()))
+                if not proxy_address.startswith(('http://', 'https://', 'socks4://', 'socks5://', 'ftp://')):
+                    return {"error": "Please Specify the Proxy Protocol (http, https, ftp, socks4, socks5)"}
+                
+                proxies = {
+                    'http': proxy_address,
+                    'https': proxy_address
+                }
+            
+            # Send the request
+            response = requests.request(
+                method=method,
+                url=path,
+                headers=headers,
+                data=body,
+                verify=VERIFY_SSL,
+                proxies=proxies,
+                allow_redirects=False 
+            )
+            
+            response_text = f"HTTP/{response.raw.version / 10.0} {response.status_code} {response.reason}\r\n"
+            for key, value in response.headers.items():
+                response_text += f"{key}: {value}\r\n"
+            response_text += "\r\n"
+            response_text += response.text
+            
+            return {
+                "response": response_text
+            }
+            
+        except Exception as e:
+            return {"error": f"Error processing request: {str(e)}"}
+
+
+config = Config()
+    
 class Tools(object):
     def __init__(self):
         pass
@@ -98,7 +183,13 @@ class Tools(object):
                         "url": url,
                         "status_code": response.status_code,
                         "success": response.status_code == 200,
-                        "warning": response.status_code != 404 and response.status_code != 200
+                        "warning": response.status_code != 404 and response.status_code != 200,
+                        "icon": "bi-check-circle-fill" if response.status_code == 200 else 
+                               "bi-exclamation-triangle-fill" if response.status_code != 404 else 
+                               "bi-x-circle-fill",
+                        "status_class": "success" if response.status_code == 200 else 
+                                      "warning" if response.status_code != 404 else 
+                                      "error"
                     }
                     checked_files.append(status)
                     
@@ -106,7 +197,9 @@ class Tools(object):
                         found_files.append({
                             "file_path": file_path,
                             "url": url,
-                            "response_length": len(response.text)
+                            "response_length": len(response.text),
+                            "icon": "bi-check-circle-fill",
+                            "status_class": "success"
                         })
                 except Exception as e:
                     checked_files.append({
@@ -131,7 +224,7 @@ class Tools(object):
             }
         except Exception as e:
             return {"error": f"Failed to check common files: {str(e)}"}
-
+    
 @app.route('/')
 def home():
     return render_template('index.html')
@@ -186,7 +279,13 @@ def remove_proxy():
     
     if protocol in PROXIES:
         del PROXIES[protocol]
-        return jsonify({'status': 'success', 'proxies': PROXIES})
+        return jsonify({
+            'status': 'success', 
+            'proxies': PROXIES,
+            'use_proxy': USE_PROXY,
+            'use_http': USE_HTTP,
+            'verify_ssl': VERIFY_SSL
+        })
     return jsonify({'error': 'Proxy not found'}), 404
 
 @app.route('/get_proxies', methods=['GET'])
@@ -194,8 +293,14 @@ def get_proxies():
     return jsonify({
         'proxies': PROXIES, 
         'use_proxy': USE_PROXY,
+        'use_http': USE_HTTP,
         'verify_ssl': VERIFY_SSL
     })
+
+@app.route('/send_request', methods=['POST'])
+def handle_send_request():
+    data = request.get_json()
+    return jsonify(config.send_request(data.get('request', '')))
 
 if __name__ == '__main__':
     app.run()
