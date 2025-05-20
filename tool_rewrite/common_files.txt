@@ -2220,6 +2220,7 @@ cron_sku.log
 crond/
 crond/logs/
 cronlog.txt
+crossdomain.xml
 cscockpit/
 csdp.cache
 csp/gateway/slc/api/swagger-ui.html
@@ -4501,6 +4502,7 @@ siteadmin/index.php
 siteadmin/login.html
 siteadmin/login.php
 sitemanager.xml
+sitemap.xml
 sites.ini
 sites.xml
 sites/all/libraries/README.txt
