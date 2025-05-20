@@ -330,6 +330,19 @@
             background-color: #f8d7da;
             border-color: #f5c6cb;
         }
+
+        /* Popup menu styles */
+        .popup-menu {
+            min-width: 300px;
+            max-width: 400px;
+        }
+        .popup-menu .form-control {
+            width: 100%;
+        }
+        .popup-menu .form-text {
+            font-size: 0.8em;
+            color: #666;
+        }
     </style>
 </head>
 <body>
@@ -338,6 +351,39 @@
     </nav>
 
     <div class="container-fluid">
+        <!-- Replace modal with popup menu -->
+        <div id="commonFilesConfigPopup" class="popup-menu" style="display: none; position: absolute; background: white; border: 1px solid #ddd; border-radius: 4px; padding: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); z-index: 1000;">
+            <div class="popup-header mb-3">
+                <h5 class="m-0">Configure Common Files Check</h5>
+            </div>
+            <div class="popup-body">
+                <div class="mb-3">
+                    <label for="threadCount" class="form-label">Number of Threads</label>
+                    <input type="number" class="form-control" id="threadCount" value="10" min="1" max="50">
+                    <div class="form-text">Number of concurrent threads to use (1-50)</div>
+                </div>
+                <div class="mb-3">
+                    <label for="concurrentRequests" class="form-label">Concurrent Requests</label>
+                    <input type="number" class="form-control" id="concurrentRequests" value="5" min="1" max="20">
+                    <div class="form-text">Number of concurrent requests per thread (1-20)</div>
+                </div>
+                <div class="mb-3">
+                    <label for="requestTimeout" class="form-label">Request Timeout (seconds)</label>
+                    <input type="number" class="form-control" id="requestTimeout" value="5" min="1" max="30">
+                    <div class="form-text">Timeout for each request in seconds</div>
+                </div>
+                <div class="mb-3">
+                    <label for="customPath" class="form-label">Custom Path (Optional)</label>
+                    <input type="text" class="form-control" id="customPath" placeholder="/path/to/FUZZ">
+                    <div class="form-text">Custom path to use instead of request path. Use FUZZ where words should be inserted.</div>
+                </div>
+            </div>
+            <div class="popup-footer d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-secondary" onclick="hideConfigPopup()">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="startCommonFilesCheck()">Start Check</button>
+            </div>
+        </div>
+
         <ul class="nav-tabs" id="myTab" role="tablist">
             <li class="nav-item">
                 <button class="nav-link active" id="saf-tab" data-target="#saf">SAF</button>
@@ -399,7 +445,7 @@
                             </div>
                             <button class="btn btn-secondary" id="checkCommonFiles">Check Common Files</button>
                             <button class="btn btn-info">Header Analysis</button>
-                            <button class="btn btn-primary">Send Request</button>
+                            <button class="btn btn-primary" id="sendRequest">Send Request</button>
                         </div>
                     </div>
                 </div>
@@ -686,7 +732,7 @@
         });
 
         // Send Request functionality
-        document.querySelector('.btn-primary').addEventListener('click', function() {
+        document.getElementById('sendRequest').addEventListener('click', function() {
             const request = document.getElementById('request').value;
             const response = document.getElementById('response');
             
@@ -814,14 +860,69 @@
             }
         }
 
-        // Add click handler for Check Common Files button
-        document.getElementById('checkCommonFiles').addEventListener('click', function() {
+        // Replace the modal JavaScript with popup handling
+        function showConfigPopup(event) {
+            const button = event.target;
+            const popup = document.getElementById('commonFilesConfigPopup');
+            
+            // Position the popup next to the button
+            const buttonRect = button.getBoundingClientRect();
+            popup.style.top = `${buttonRect.bottom + window.scrollY + 5}px`;
+            popup.style.left = `${buttonRect.left + window.scrollX}px`;
+            
+            // Show the popup
+            popup.style.display = 'block';
+            
+            // Add click outside listener
+            document.addEventListener('click', handleClickOutside);
+        }
+
+        function hideConfigPopup() {
+            const popup = document.getElementById('commonFilesConfigPopup');
+            popup.style.display = 'none';
+            document.removeEventListener('click', handleClickOutside);
+        }
+
+        function handleClickOutside(event) {
+            const popup = document.getElementById('commonFilesConfigPopup');
+            const button = document.getElementById('checkCommonFiles');
+            
+            if (!popup.contains(event.target) && !button.contains(event.target)) {
+                hideConfigPopup();
+            }
+        }
+
+        function startCommonFilesCheck() {
+            const threadCount = document.getElementById('threadCount').value;
+            const concurrentRequests = document.getElementById('concurrentRequests').value;
+            const requestTimeout = document.getElementById('requestTimeout').value;
+            const customPath = document.getElementById('customPath').value;
+
+            // Hide the popup
+            hideConfigPopup();
+
+            // Start the check with the configured parameters
+            checkCommonFiles(threadCount, concurrentRequests, requestTimeout, customPath);
+        }
+
+        // Update the checkCommonFiles button click handler
+        document.getElementById('checkCommonFiles').addEventListener('click', function(event) {
+            // If there's an active check, stop it
+            if (currentEventSource) {
+                currentEventSource.close();
+                currentEventSource = null;
+                this.textContent = 'Check Common Files';
+                this.classList.remove('btn-danger');
+                this.classList.add('btn-secondary');
+                return;
+            }
+
             const request = document.getElementById('request').value;
             if (!request) {
                 alert('Please enter a request first');
                 return;
             }
-            checkCommonFiles();
+            showConfigPopup(event);
         });
     </script>
 </body>
