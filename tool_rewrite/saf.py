@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, Response
 import jwt
 import requests
 import re
@@ -124,8 +124,19 @@ class Tools(object):
                     break
             
             if not host:
-                return {"error": "Could not determine host"}
-            
+                raw_host = input("Please enter the target host (e.g. example.com): ").strip()
+                try:
+                    parsed = urlparse(raw_host)
+                    host = parsed.netloc
+                    
+                    if ':' in host:
+                        host = host.split(':')[0]
+                        
+                    if not host:
+                        return {"error": "Invalid host format"}
+                except Exception as e:
+                    return {"error": f"Failed to parse host: {str(e)}"}
+                
             protocol = "http" if USE_HTTP else "https"
             base_url = f"{protocol}://{host}"
 
@@ -224,7 +235,9 @@ class Tools(object):
             }
         except Exception as e:
             return {"error": f"Failed to check common files: {str(e)}"}
-    
+
+tools = Tools()
+
 @app.route('/')
 def home():
     return render_template('index.html')
@@ -302,5 +315,131 @@ def handle_send_request():
     data = request.get_json()
     return jsonify(config.send_request(data.get('request', '')))
 
+@app.route('/check_common_files', methods=['GET'])
+def handle_check_common_files():
+    try:
+        request_text = request.args.get('request_text', '')
+        use_proxy = request.args.get('use_proxy', 'false').lower() == 'true'
+        proxy_address = request.args.get('proxy_address', '')
+        verify = request.args.get('verify', 'true').lower() == 'true'
+        use_http = request.args.get('use_http', 'false').lower() == 'true'
+
+        if not request_text:
+            return jsonify({'error': 'No request text provided'}), 400
+
+        # Parse the request to get the base URL
+        lines = request_text.split('\n')
+        if not lines:
+            return jsonify({'error': 'Invalid request format'}), 400
+
+        # Get headers from original request
+        headers = {}
+        for line in lines[1:]:
+            if ':' in line:
+                key, value = line.split(':', 1)
+                headers[key.strip()] = value.strip()
+
+        # Get the first line (method and path)
+        first_line = lines[0].split()
+        if len(first_line) < 2:
+            return jsonify({'error': 'Invalid request format'}), 400
+        
+        method = first_line[0]
+        path = first_line[1]
+
+        # Get host from headers
+        host = headers.get('Host', '')
+        if not host:
+            return jsonify({'error': 'No host specified in headers'}), 400
+
+        # Construct base URL
+        protocol = 'http://' if use_http else 'https://'
+        base_url = f"{protocol}{host}"
+
+        # Configure proxy if enabled
+        proxies = None
+        if use_proxy and proxy_address:
+            proxies = {
+                'http': proxy_address,
+                'https': proxy_address
+            }
+
+        # Load common files to check
+        with open('common_files.txt', 'r') as f:
+            common_files = [line.strip() for line in f if line.strip()]
+
+        total_files = len(common_files)
+        found_files = []
+        checked_files = []
+
+        def generate():
+            # Check each file
+            for file_path in common_files:
+                if not file_path.startswith('/'):
+                    file_path = '/' + file_path
+                
+                url = f"{base_url}{file_path}"
+                try:
+                    response = requests.request(
+                        method=method,
+                        url=url,
+                        headers=headers,
+                        verify=verify,
+                        proxies=proxies,
+                        timeout=5,
+                        allow_redirects=False
+                    )
+                    
+                    status = {
+                        "file_path": file_path,
+                        "url": url,
+                        "status_code": response.status_code,
+                        "success": response.status_code == 200,
+                        "warning": response.status_code != 404 and response.status_code != 200,
+                        "icon": "bi-check-circle-fill" if response.status_code == 200 else 
+                               "bi-exclamation-triangle-fill" if response.status_code != 404 else 
+                               "bi-x-circle-fill",
+                        "status_class": "success" if response.status_code == 200 else 
+                                      "warning" if response.status_code != 404 else 
+                                      "error"
+                    }
+                    checked_files.append(status)
+                    
+                    if response.status_code == 200:
+                        found_files.append({
+                            "file_path": file_path,
+                            "url": url,
+                            "response_length": len(response.text),
+                            "icon": "bi-check-circle-fill",
+                            "status_class": "success"
+                        })
+                except Exception as e:
+                    checked_files.append({
+                        "file_path": file_path,
+                        "url": url,
+                        "status_code": 0,
+                        "success": False,
+                        "error": str(e)
+                    })
+
+                # Send progress update
+                yield f"data: {json.dumps({
+                    'total_files': total_files,
+                    'total_files_checked': len(checked_files),
+                    'files_found': len(found_files),
+                    'found_files': found_files,
+                    'checked_files': checked_files,
+                    'categories': {
+                        'found': [f for f in checked_files if f['status_code'] == 200],
+                        'warnings': [f for f in checked_files if f['status_code'] != 404 and f['status_code'] != 200],
+                        'misses': [f for f in checked_files if f['status_code'] == 404]
+                    }
+                })}\n\n"
+
+        return Response(generate(), mimetype='text/event-stream')
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
-    app.run()
+    app.run(debug=True)

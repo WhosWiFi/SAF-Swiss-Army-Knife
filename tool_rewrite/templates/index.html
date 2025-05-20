@@ -397,7 +397,7 @@
                             <div id="proxyList" class="mt-2">
                                 <!-- Proxy list will be populated here -->
                             </div>
-                            <button class="btn btn-secondary">Check Common Files</button>
+                            <button class="btn btn-secondary" id="checkCommonFiles">Check Common Files</button>
                             <button class="btn btn-info">Header Analysis</button>
                             <button class="btn btn-primary">Send Request</button>
                         </div>
@@ -713,45 +713,116 @@
             });
         });
 
-        function displayResults(data) {
-            const foundSection = document.getElementById('foundFiles');
-            const warningSection = document.getElementById('warningFiles');
-            const missSection = document.getElementById('missFiles');
-            
-            // Clear previous results
-            foundSection.innerHTML = '';
-            warningSection.innerHTML = '';
-            missSection.innerHTML = '';
-            
-            // Display found files
-            data.categories.found.forEach(file => {
-                foundSection.innerHTML += `
-                    <div class="list-group-item success">
-                        <strong>${file.file_path}</strong> - ${file.url}
-                        <br>Response Length: ${file.response_length}
-                    </div>
-                `;
-            });
-            
-            // Display warnings
-            data.categories.warnings.forEach(file => {
-                warningSection.innerHTML += `
-                    <div class="list-group-item warning">
-                        <strong>${file.file_path}</strong> - ${file.url}
-                        <br>Status: ${file.status_code}
-                    </div>
-                `;
-            });
-            
-            // Display misses
-            data.categories.misses.forEach(file => {
-                missSection.innerHTML += `
-                    <div class="list-group-item danger">
-                        <strong>${file.file_path}</strong> - ${file.url}
-                    </div>
-                `;
-            });
+        let currentEventSource = null; // Store the current EventSource
+
+        function checkCommonFiles() {
+            const button = document.getElementById('checkCommonFiles');
+            const requestText = document.getElementById('request').value;
+            const useProxy = document.getElementById('useProxy').checked;
+            const proxyAddress = document.querySelector('.proxy-item .badge')?.nextElementSibling?.textContent || '';
+            const verify = document.getElementById('verifySsl').checked;
+            const useHttp = document.getElementById('useHttp').checked;
+
+            // If there's an active check, stop it
+            if (currentEventSource) {
+                currentEventSource.close();
+                currentEventSource = null;
+                button.textContent = 'Check Common Files';
+                button.classList.remove('btn-danger');
+                button.classList.add('btn-secondary');
+                return;
+            }
+
+            // Change button to Stop state
+            button.textContent = 'Stop';
+            button.classList.remove('btn-secondary');
+            button.classList.add('btn-danger');
+
+            const securityFindings = document.getElementById('securityFindings');
+            securityFindings.innerHTML = '<div class="text-center"><i class="bi bi-arrow-repeat spin"></i> Checking common files...</div>';
+            document.querySelector('#securityFindings').previousElementSibling.textContent = 'Output';
+
+            // Create EventSource for streaming updates
+            currentEventSource = new EventSource(`/check_common_files?request_text=${encodeURIComponent(requestText)}&use_proxy=${useProxy}&proxy_address=${encodeURIComponent(proxyAddress)}&verify=${verify}&use_http=${useHttp}`);
+
+            currentEventSource.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.error) {
+                        securityFindings.innerHTML = `<div class="text-danger">${data.error}</div>`;
+                        resetButton();
+                        return;
+                    }
+
+                    let result = `<div class="mb-3">Common File Check Results:</div>`;
+                    
+                    result += `<div>Total files checked: ${data.total_files_checked} of ${data.total_files}</div>`;
+                    result += `<div>Files found: ${data.files_found}</div><br>`;
+                    
+                    if (data.checked_files && data.checked_files.length > 0) {
+                        result += '<div class="mb-3">Checking files:</div>';
+                        data.checked_files.forEach(file => {
+                            const statusClass = file.success ? 'success' : 'error';
+                            const icon = file.success ? 'bi-check-circle-fill' : 'bi-x-circle-fill';
+                            result += `<div class="file-status ${statusClass}">`;
+                            result += `<i class="bi ${icon}"></i>`;
+                            result += `<span>${file.file_path}</span>`;
+                            if (!file.success) {
+                                result += `<span class="text-muted ms-2">(Status: ${file.status_code || 'Error'})</span>`;
+                            }
+                            result += '</div>';
+                        });
+                    }
+                    
+                    if (data.found_files && data.found_files.length > 0) {
+                        result += '<div class="mt-3">Found files:</div>';
+                        data.found_files.forEach(file => {
+                            result += `<div class="file-status success">`;
+                            result += `<i class="bi bi-check-circle-fill"></i>`;
+                            result += `<span>${file.file_path}</span>`;
+                            result += `<span class="text-muted ms-2">(${file.response_length} bytes)</span>`;
+                            result += '</div>';
+                        });
+                    }
+                    
+                    securityFindings.innerHTML = result;
+                    securityFindings.scrollTop = securityFindings.scrollHeight;
+
+                    // Close the connection if we've checked all files
+                    if (data.total_files_checked >= data.total_files) {
+                        resetButton();
+                    }
+                } catch (e) {
+                    console.error('Error parsing JSON:', e);
+                }
+            };
+
+            currentEventSource.onerror = function(error) {
+                securityFindings.innerHTML = `<div class="text-danger">Error: ${error.message || 'Connection error'}</div>`;
+                resetButton();
+            };
         }
+
+        function resetButton() {
+            const button = document.getElementById('checkCommonFiles');
+            button.textContent = 'Check Common Files';
+            button.classList.remove('btn-danger');
+            button.classList.add('btn-secondary');
+            if (currentEventSource) {
+                currentEventSource.close();
+                currentEventSource = null;
+            }
+        }
+
+        // Add click handler for Check Common Files button
+        document.getElementById('checkCommonFiles').addEventListener('click', function() {
+            const request = document.getElementById('request').value;
+            if (!request) {
+                alert('Please enter a request first');
+                return;
+            }
+            checkCommonFiles();
+        });
     </script>
 </body>
 </html>
