@@ -761,13 +761,9 @@
 
         let currentEventSource = null; // Store the current EventSource
 
-        function checkCommonFiles() {
+        function checkCommonFiles(threadCount, concurrentRequests, requestTimeout, customPath) {
             const button = document.getElementById('checkCommonFiles');
             const requestText = document.getElementById('request').value;
-            const useProxy = document.getElementById('useProxy').checked;
-            const proxyAddress = document.querySelector('.proxy-item .badge')?.nextElementSibling?.textContent || '';
-            const verify = document.getElementById('verifySsl').checked;
-            const useHttp = document.getElementById('useHttp').checked;
 
             // If there's an active check, stop it
             if (currentEventSource) {
@@ -788,8 +784,8 @@
             securityFindings.innerHTML = '<div class="text-center"><i class="bi bi-arrow-repeat spin"></i> Checking common files...</div>';
             document.querySelector('#securityFindings').previousElementSibling.textContent = 'Output';
 
-            // Create EventSource for streaming updates
-            currentEventSource = new EventSource(`/check_common_files?request_text=${encodeURIComponent(requestText)}&use_proxy=${useProxy}&proxy_address=${encodeURIComponent(proxyAddress)}&verify=${verify}&use_http=${useHttp}`);
+            // Create EventSource for streaming updates with all configuration parameters
+            currentEventSource = new EventSource(`/check_common_files?request_text=${encodeURIComponent(requestText)}&thread_count=${threadCount}&concurrent_requests=${concurrentRequests}&request_timeout=${requestTimeout}&custom_path=${encodeURIComponent(customPath)}`);
 
             currentEventSource.onmessage = function(event) {
                 try {

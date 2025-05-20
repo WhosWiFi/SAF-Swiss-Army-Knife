@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, request, Response, session
+from flask import Flask, render_template, jsonify, request, Response
 import jwt
 import requests
 import re
@@ -6,6 +6,7 @@ import os
 from dotenv import load_dotenv
 import json
 from urllib.parse import urlparse
+from concurrent.futures import ThreadPoolExecutor
 import secrets
 
 load_dotenv()
@@ -13,29 +14,18 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv("APP_SECRET_KEY", secrets.token_hex(32))
 
-# Default configuration
-DEFAULT_CONFIG = {
-    'use_http': False,
-    'use_proxy': False,
-    'verify_ssl': True,
-    'proxies': {}
-}
+# Global configuration variables
+USE_HTTP = False
+USE_PROXY = False
+VERIFY_SSL = True
+PROXIES = {}
 
 class Config(object):
     def __init__(self):
         pass
     
-    def get_user_config(self):
-        # Initialize session with default config if not exists
-        if 'config' not in session:
-            session['config'] = DEFAULT_CONFIG.copy()
-        return session['config']
-    
     def send_request(self, request):
         try:
-            # Get user-specific config
-            user_config = self.get_user_config()
-            
             request_line_by_line = request.split('\n')
             if not request_line_by_line:
                 return {"error": "Empty request"}
@@ -64,23 +54,23 @@ class Config(object):
             if not path.startswith('http'):
                 host = headers.get('Host', '')
                 if host:
-                    protocol = 'http://' if user_config['use_http'] else 'https://'
+                    protocol = 'http://' if USE_HTTP else 'https://'
                     path = f"{protocol}{host}{path}"
                 else:
                     return {"error": "No host specified in headers and path is not absolute URL"}
             else:
-                if not user_config['use_http'] and path.startswith('http://'):
+                if not USE_HTTP and path.startswith('http://'):
                     path = path.replace('http://', 'https://', 1)
-                elif user_config['use_http'] and path.startswith('https://'):
+                elif USE_HTTP and path.startswith('https://'):
                     path = path.replace('https://', 'http://', 1)
             
             # Configure proxy if enabled
             proxies = None
-            if user_config['use_proxy']:
-                if not user_config['proxies']:
+            if USE_PROXY:
+                if not PROXIES:
                     return {"error": "No proxies configured"}
                 
-                proxy_address = next(iter(user_config['proxies'].values()))
+                proxy_address = next(iter(PROXIES.values()))
                 protocol = proxy_address.split('://')[0]
                 
                 if protocol in ['http', 'https']:
@@ -97,7 +87,7 @@ class Config(object):
                 url=path,
                 headers=headers,
                 data=body,
-                verify=user_config['verify_ssl'],
+                verify=VERIFY_SSL,
                 proxies=proxies,
                 allow_redirects=False 
             )
@@ -147,9 +137,7 @@ class Tools(object):
                 except Exception as e:
                     return {"error": f"Failed to parse host: {str(e)}"}
             
-            # Get user's configuration
-            user_config = config.get_user_config()
-            protocol = "http" if user_config['use_http'] else "https"
+            protocol = "http" if USE_HTTP else "https"
             base_url = f"{protocol}://{host}"
 
             headers = {}
@@ -160,10 +148,10 @@ class Tools(object):
             
             # Configure proxy if enabled
             proxies = None
-            if user_config['use_proxy']:
-                if not user_config['proxies']:
+            if USE_PROXY:
+                if not PROXIES:
                     return {"error": "No proxies configured"}
-                proxy_address = next(iter(user_config['proxies'].values()))
+                proxy_address = next(iter(PROXIES.values()))
                 proxies = {
                     'http': proxy_address,
                     'https': proxy_address
@@ -186,7 +174,7 @@ class Tools(object):
                     response = requests.get(
                         url, 
                         headers=headers, 
-                        verify=user_config['verify_ssl'],
+                        verify=VERIFY_SSL,
                         proxies=proxies,
                         timeout=10,
                         allow_redirects=False
@@ -261,30 +249,28 @@ def home():
 
 @app.route('/toggle_http', methods=['POST'])
 def toggle_http():
+    global USE_HTTP
     data = request.get_json()
-    user_config = config.get_user_config()
-    user_config['use_http'] = data.get('use_http', False)
-    session['config'] = user_config
-    return jsonify({'status': 'success', 'use_http': user_config['use_http']})
+    USE_HTTP = data.get('use_http', False)
+    return jsonify({'status': 'success', 'use_http': USE_HTTP})
 
 @app.route('/toggle_proxy', methods=['POST'])
 def toggle_proxy():
+    global USE_PROXY
     data = request.get_json()
-    user_config = config.get_user_config()
-    user_config['use_proxy'] = data.get('use_proxy', False)
-    session['config'] = user_config
-    return jsonify({'status': 'success', 'use_proxy': user_config['use_proxy']})
+    USE_PROXY = data.get('use_proxy', False)
+    return jsonify({'status': 'success', 'use_proxy': USE_PROXY})
 
 @app.route('/toggle_verify_ssl', methods=['POST'])
 def toggle_verify_ssl():
+    global VERIFY_SSL
     data = request.get_json()
-    user_config = config.get_user_config()
-    user_config['verify_ssl'] = data.get('verify_ssl', True)
-    session['config'] = user_config
-    return jsonify({'status': 'success', 'verify_ssl': user_config['verify_ssl']})
+    VERIFY_SSL = data.get('verify_ssl', True)
+    return jsonify({'status': 'success', 'verify_ssl': VERIFY_SSL})
 
 @app.route('/add_proxy', methods=['POST'])
 def add_proxy():
+    global PROXIES
     data = request.get_json()
     proxy_url = data.get('proxy_url', '').strip()
     
@@ -297,40 +283,36 @@ def add_proxy():
         if protocol not in ['http', 'https']:
             return jsonify({'error': 'Only HTTP and HTTPS proxies are supported'}), 400
             
-        # Add the proxy to the user's config
-        user_config = config.get_user_config()
-        user_config['proxies'][protocol] = proxy_url
-        session['config'] = user_config
-        return jsonify({'status': 'success', 'proxies': user_config['proxies']})
+        # Add the proxy to the global PROXIES dictionary
+        PROXIES[protocol] = proxy_url
+        return jsonify({'status': 'success', 'proxies': PROXIES})
     except Exception as e:
         return jsonify({'error': str(e)}), 400
 
 @app.route('/remove_proxy', methods=['POST'])
 def remove_proxy():
+    global PROXIES
     data = request.get_json()
     protocol = data.get('protocol', '').strip()
     
-    user_config = config.get_user_config()
-    if protocol in user_config['proxies']:
-        del user_config['proxies'][protocol]
-        session['config'] = user_config
+    if protocol in PROXIES:
+        del PROXIES[protocol]
         return jsonify({
             'status': 'success', 
-            'proxies': user_config['proxies'],
-            'use_proxy': user_config['use_proxy'],
-            'use_http': user_config['use_http'],
-            'verify_ssl': user_config['verify_ssl']
+            'proxies': PROXIES,
+            'use_proxy': USE_PROXY,
+            'use_http': USE_HTTP,
+            'verify_ssl': VERIFY_SSL
         })
     return jsonify({'error': 'Proxy not found'}), 404
 
 @app.route('/get_proxies', methods=['GET'])
 def get_proxies():
-    user_config = config.get_user_config()
     return jsonify({
-        'proxies': user_config['proxies'], 
-        'use_proxy': user_config['use_proxy'],
-        'use_http': user_config['use_http'],
-        'verify_ssl': user_config['verify_ssl']
+        'proxies': PROXIES, 
+        'use_proxy': USE_PROXY,
+        'use_http': USE_HTTP,
+        'verify_ssl': VERIFY_SSL
     })
 
 @app.route('/send_request', methods=['POST'])
@@ -342,7 +324,6 @@ def handle_send_request():
 def handle_check_common_files():
     try:
         request_text = request.args.get('request_text', '')
-        user_config = config.get_user_config()
 
         # Get configuration parameters
         thread_count = int(request.args.get('thread_count', 10))
@@ -378,14 +359,14 @@ def handle_check_common_files():
         if not host:
             return jsonify({'error': 'No host specified in headers'}), 400
 
-        # Construct base URL using user's HTTP setting
-        protocol = 'http://' if user_config['use_http'] else 'https://'
+        # Construct base URL using global HTTP setting
+        protocol = 'http://' if USE_HTTP else 'https://'
         base_url = f"{protocol}{host}"
 
         # Configure proxy if enabled
         proxies = None
-        if user_config['use_proxy'] and user_config['proxies']:
-            proxy_address = next(iter(user_config['proxies'].values()))
+        if USE_PROXY and PROXIES:
+            proxy_address = next(iter(PROXIES.values()))
             proxies = {
                 'http': proxy_address,
                 'https': proxy_address
@@ -400,29 +381,28 @@ def handle_check_common_files():
         checked_files = []
 
         def check_file(file_path):
-            if not file_path.startswith('/'):
-                file_path = '/' + file_path
-            
-            # Use custom path if provided, replacing FUZZ with the file path
             if custom_path:
-                url_path = custom_path.replace('FUZZ', file_path.lstrip('/'))
+                url_path = custom_path.replace('FUZZ', file_path)
+            
+            elif not file_path.startswith('/'):
+                url_path = '/' + file_path
             else:
                 url_path = file_path
             
             url = f"{base_url}{url_path}"
+            print(url)
             try:
-                response = requests.request(
-                    method=method,
+                response = requests.get(
                     url=url,
                     headers=headers,
-                    verify=user_config['verify_ssl'],
+                    verify=VERIFY_SSL,
                     proxies=proxies,
                     timeout=request_timeout,
                     allow_redirects=False
                 )
                 
                 status = {
-                    "file_path": file_path,
+                    "file_path": url_path,
                     "url": url,
                     "status_code": response.status_code,
                     "success": response.status_code == 200,
@@ -437,7 +417,7 @@ def handle_check_common_files():
                 
                 if response.status_code == 200:
                     found_files.append({
-                        "file_path": file_path,
+                        "file_path": url_path,
                         "url": url,
                         "response_length": len(response.text),
                         "icon": "bi-check-circle-fill",
@@ -455,28 +435,21 @@ def handle_check_common_files():
                 }
 
         def generate():
-            # Process files in batches using threading
-            from concurrent.futures import ThreadPoolExecutor
             with ThreadPoolExecutor(max_workers=thread_count) as executor:
-                # Submit initial batch of tasks
                 futures = []
                 for i in range(min(thread_count * concurrent_requests, total_files)):
                     futures.append(executor.submit(check_file, common_files[i]))
                 
-                # Process results and submit new tasks as they complete
                 current_index = thread_count * concurrent_requests
                 while futures:
-                    # Get the next completed future
                     future = futures.pop(0)
                     result = future.result()
                     checked_files.append(result)
                     
-                    # Submit new task if there are more files
                     if current_index < total_files:
                         futures.append(executor.submit(check_file, common_files[current_index]))
                         current_index += 1
                     
-                    # Send progress update
                     yield f"data: {json.dumps({
                         'total_files': total_files,
                         'total_files_checked': len(checked_files),
